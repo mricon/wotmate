@@ -1,0 +1,9 @@
+.idea
+graph.*
+siginfo.db
+ownertrust.txt
+keyring.kbx
+keyring.gpg
+*.pyc
+*~
+*.swp
