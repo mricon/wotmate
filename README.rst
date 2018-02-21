@@ -21,7 +21,7 @@ assign ownertrust to a key you did not directly sign).
 
 Example usage:
 
-    ./graph-paths.py --fromkey torvalds jeyu@kernel.org
+    ./graph-paths.py --fromkey torvalds jeyu
 
 .. image:: https://raw.githubusercontent.com/mricon/wotmate/master/examples/torvalds-to-jeyu.png
    :alt: Example graph produced
@@ -37,7 +37,7 @@ of trust."
 
 Example usage:
 
-    ./graph-to-full.py jeyu@kernel.org
+    ./graph-to-full.py jeyu
 
 .. image:: https://raw.githubusercontent.com/mricon/wotmate/master/examples/full-to-jeyu.png
    :alt: Example graph produced
