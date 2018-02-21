@@ -209,7 +209,6 @@ def make_graph_node(c, p_rowid, show_trust=False):
     except IndexError:
         show = ''
 
-
     if algo in ALGOS.keys():
         algosize = '%s %s' % (ALGOS[algo], size)
     else:

@@ -101,9 +101,9 @@ if __name__ == '__main__':
     dbconn = sqlite3.connect(cmdargs.dbfile)
     cursor = dbconn.cursor()
 
-    b_keyid = cmdargs.tokey[-16:].upper()
+    tokey = cmdargs.tokey[-16:].upper()
 
-    paths = get_key_paths(cursor, b_keyid, cmdargs.maxdepth)
+    key_paths = get_key_paths(cursor, tokey, cmdargs.maxdepth)
 
     graph = pd.Dot(
         graph_type='digraph',
@@ -113,7 +113,7 @@ if __name__ == '__main__':
         fontsize=cmdargs.fontsize,
     )
 
-    wotmate.draw_key_paths(cursor, paths, graph, cmdargs.show_trust)
+    wotmate.draw_key_paths(cursor, key_paths, graph, cmdargs.show_trust)
 
     chunks = cmdargs.out.split('.')
     outformat = chunks[-1]

@@ -124,16 +124,16 @@ if __name__ == '__main__':
     cursor = dbconn.cursor()
 
     if not cmdargs.fromkey:
-        t_keyid = get_u_keyid(cursor)
-        if t_keyid is None:
+        fromkey = get_u_keyid(cursor)
+        if fromkey is None:
             logger.critical('Could not find ultimate-trust key, try specifying --fromkey')
             sys.exit(1)
     else:
-        t_keyid = cmdargs.fromkey[-16:].upper()
+        fromkey = cmdargs.fromkey[-16:].upper()
 
-    b_keyid = cmdargs.tokey[-16:].upper()
+    tokey = cmdargs.tokey[-16:].upper()
 
-    paths = get_key_paths(cursor, t_keyid, b_keyid, cmdargs.maxdepth, cmdargs.maxpaths)
+    key_paths = get_key_paths(cursor, fromkey, tokey, cmdargs.maxdepth, cmdargs.maxpaths)
 
     graph = pd.Dot(
         graph_type='digraph',
@@ -143,9 +143,8 @@ if __name__ == '__main__':
         fontsize=cmdargs.fontsize,
     )
 
-    wotmate.draw_key_paths(cursor, paths, graph, cmdargs.show_trust)
+    wotmate.draw_key_paths(cursor, key_paths, graph, cmdargs.show_trust)
 
     chunks = cmdargs.out.split('.')
     outformat = chunks[-1]
     graph.write(cmdargs.out, format=outformat)
-

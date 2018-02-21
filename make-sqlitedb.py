@@ -24,6 +24,7 @@ import os
 import sqlite3
 import wotmate
 
+
 def populate_all_pubkeys(c, use_weak):
     logger.info('Loading all valid pubkeys')
     keyid_rowid_map = {}
@@ -103,7 +104,7 @@ def populate_uid_sig_data(c, keyid_rowid_map):
 
             try:
                 fields = wotmate.gpg_get_fields(line)
-            except UnicodeDecodeError as ex:
+            except UnicodeDecodeError:
                 # Broken uid, ignore it
                 uidrowid = None
                 continue
@@ -132,7 +133,6 @@ def populate_uid_sig_data(c, keyid_rowid_map):
 
             # We use this map to eject revoked sigs before we store them
             # We only want sig types 0x10-13
-            sigtype = 0x10
             if len(fields[10]) >= 2:
                 sigtype = int(fields[10][:2], base=16)
                 if sigtype == 0x30:
@@ -213,9 +213,9 @@ if __name__ == '__main__':
         pass
 
     dbconn = sqlite3.connect(cmdargs.dbfile)
-    c = dbconn.cursor()
-    wotmate.init_sqlite_db(c)
-    keyid_rowid_map = populate_all_pubkeys(c, cmdargs.use_weak)
-    populate_uid_sig_data(c, keyid_rowid_map)
+    cursor = dbconn.cursor()
+    wotmate.init_sqlite_db(cursor)
+    kr_map = populate_all_pubkeys(cursor, cmdargs.use_weak)
+    populate_uid_sig_data(cursor, kr_map)
     dbconn.close()
     logger.info('Wrote out %s' % cmdargs.dbfile)
