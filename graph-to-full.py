@@ -29,15 +29,7 @@ import wotmate
 import pydotplus.graphviz as pd
 
 
-def get_key_paths(c, b_keyid, maxdepth=5):
-    # First, get rowid of the bottom key
-    try:
-        c.execute('''SELECT rowid FROM pub WHERE keyid = ?''', (b_keyid,))
-        (b_p_rowid,) = c.fetchone()
-    except TypeError:
-        logger.critical('Bottom key %s is not in the db' % b_keyid)
-        sys.exit(1)
-
+def get_key_paths(c, b_p_rowid, maxdepth=5):
     # Next, get rowids of all keys with full trust
     f_p_rowids = wotmate.get_all_full_trust(c)
 
@@ -77,8 +69,6 @@ if __name__ == '__main__':
     ap.add_argument('--quiet', action='store_true',
                     default=False,
                     help='Be quiet and only output errors')
-    ap.add_argument('--tokey', required=True,
-                    help='Bottom key ID')
     ap.add_argument('--maxdepth', default=4, type=int,
                     help='Try up to this maximum depth')
     ap.add_argument('--font', default='droid sans,dejavu sans,helvetica',
@@ -92,6 +82,8 @@ if __name__ == '__main__':
     ap.add_argument('--show-trust', action='store_true', dest='show_trust',
                     default=False,
                     help='Display validity and trust values')
+    ap.add_argument('key_id', nargs=1, default=False,
+                    help='Bottom key ID for path tracing')
 
     cmdargs = ap.parse_args()
 
@@ -101,9 +93,15 @@ if __name__ == '__main__':
     dbconn = sqlite3.connect(cmdargs.dbfile)
     cursor = dbconn.cursor()
 
-    tokey = cmdargs.tokey[-16:].upper()
+    if len(cmdargs.key_id) != 1:
+        logger.critical('Please provide a single key id for path tracing')
+        sys.exit(1)
 
-    key_paths = get_key_paths(cursor, tokey, cmdargs.maxdepth)
+    to_rowid = wotmate.get_pubrow_id(cursor, cmdargs.key_id[0])
+    if to_rowid is None:
+        sys.exit(1)
+
+    key_paths = get_key_paths(cursor, to_rowid, cmdargs.maxdepth)
 
     graph = pd.Dot(
         graph_type='digraph',
@@ -118,3 +116,4 @@ if __name__ == '__main__':
     chunks = cmdargs.out.split('.')
     outformat = chunks[-1]
     graph.write(cmdargs.out, format=outformat)
+    logger.info('Wrote %s' % cmdargs.out)

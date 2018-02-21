@@ -303,3 +303,34 @@ def draw_key_paths(c, paths, graph, show_trust):
             signer = anode
 
     graph.add_subgraph(tl_subgraph)
+
+
+def get_pubrow_id(c, whatnot):
+    # first, attempt to treat it as key id
+    try:
+        int(whatnot, 16)
+        as_keyid = '%%%s' % whatnot[-16:].upper()
+        c.execute('''SELECT DISTINCT rowid FROM pub WHERE keyid LIKE ?''', (as_keyid,))
+        rows = c.fetchall()
+        if len(rows) == 1:
+            return rows[0][0]
+        elif len(rows) > 1:
+            logger.critical('More than one key matched %s, use 16-character keyid' % whatnot)
+        else:
+            logger.critical('No keyids in the database matching %s' % whatnot)
+        return None
+    except ValueError:
+        # not hexadecimal, so not keyid
+        pass
+
+    # attempt to look up in uiddata
+    c.execute('''SELECT DISTINCT pubrowid FROM uid WHERE uiddata LIKE ? COLLATE NOCASE''', ('%%%s%%' % whatnot,))
+    rows = c.fetchall()
+    if len(rows) == 1:
+        return rows[0][0]
+    elif len(rows) > 1:
+        logger.critical('More than one result matching "%s", be more specific' % whatnot)
+    else:
+        logger.critical('Nothing found matching "%s"' % whatnot)
+
+    return None

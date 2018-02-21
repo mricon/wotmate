@@ -218,4 +218,4 @@ if __name__ == '__main__':
     kr_map = populate_all_pubkeys(cursor, cmdargs.use_weak)
     populate_uid_sig_data(cursor, kr_map)
     dbconn.close()
-    logger.info('Wrote out %s' % cmdargs.dbfile)
+    logger.info('Wrote %s' % cmdargs.dbfile)

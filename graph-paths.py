@@ -29,42 +29,27 @@ import wotmate
 import pydotplus.graphviz as pd
 
 
-def get_u_keyid(c):
-    c.execute('''SELECT keyid 
+def get_u_key(c):
+    c.execute('''SELECT rowid 
                    FROM pub
                   WHERE ownertrust = 'u' 
                   LIMIT 1
     ''')
     try:
-        (keyid,) = c.fetchone()
-        return keyid
+        (p_rowid,) = c.fetchone()
+        return p_rowid
     except ValueError:
         return None
 
 
-def get_key_paths(c, t_keyid, b_keyid, maxdepth=5, maxpaths=5):
-    # First, get rowid of the top and bottom key
-    try:
-        c.execute('''SELECT rowid FROM pub WHERE keyid = ?''', (t_keyid,))
-        (t_p_rowid,) = c.fetchone()
-    except TypeError:
-        logger.critical('Top key %s is not in the db' % t_keyid)
-        sys.exit(1)
-
-    try:
-        c.execute('''SELECT rowid FROM pub WHERE keyid = ?''', (b_keyid,))
-        (b_p_rowid,) = c.fetchone()
-    except TypeError:
-        logger.critical('Bottom key %s is not in the db' % b_keyid)
-        sys.exit(1)
-
+def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
     # Next, get rowids of all keys signed by top key
     sigs = wotmate.get_all_signed_by(c, t_p_rowid)
     if not sigs:
-        logger.critical('Top key %s did not sign any keys' % t_keyid)
+        logger.critical('Top key did not sign any keys')
         sys.exit(1)
 
-    logger.info('Found %s keys signed by %s' % (len(sigs), t_keyid))
+    logger.info('Found %s keys signed by top key' % len(sigs))
 
     paths = []
     ignorekeys = [item for sublist in sigs for item in sublist]
@@ -76,7 +61,7 @@ def get_key_paths(c, t_keyid, b_keyid, maxdepth=5, maxpaths=5):
             ignorekeys += path
 
     if not paths:
-        logger.critical('No paths found from %s to %s' % (t_keyid, b_keyid))
+        logger.critical('No paths found.')
         sys.exit(1)
 
     culled = wotmate.cull_redundant_paths(paths, maxpaths)
@@ -97,8 +82,6 @@ if __name__ == '__main__':
                     help='Be quiet and only output errors')
     ap.add_argument('--fromkey',
                     help='Top key ID (if omitted, will use the key with ultimate trust)')
-    ap.add_argument('--tokey', required=True,
-                    help='Bottom key ID')
     ap.add_argument('--maxdepth', default=4, type=int,
                     help='Try up to this maximum depth')
     ap.add_argument('--maxpaths', default=4, type=int,
@@ -114,26 +97,36 @@ if __name__ == '__main__':
     ap.add_argument('--show-trust', action='store_true', dest='show_trust',
                     default=False,
                     help='Display validity and trust values')
+    ap.add_argument('key_id', nargs=1, default=False,
+                    help='Bottom key ID for path tracing')
 
     cmdargs = ap.parse_args()
 
     global logger
     logger = wotmate.get_logger(cmdargs.quiet)
 
+    if len(cmdargs.key_id) != 1:
+        logger.critical('Please provide a single key id for path tracing')
+        sys.exit(1)
+
     dbconn = sqlite3.connect(cmdargs.dbfile)
     cursor = dbconn.cursor()
 
     if not cmdargs.fromkey:
-        fromkey = get_u_keyid(cursor)
-        if fromkey is None:
+        from_rowid = get_u_key(cursor)
+        if from_rowid is None:
             logger.critical('Could not find ultimate-trust key, try specifying --fromkey')
             sys.exit(1)
     else:
-        fromkey = cmdargs.fromkey[-16:].upper()
+        from_rowid = wotmate.get_pubrow_id(cursor, cmdargs.fromkey)
+        if from_rowid is None:
+            sys.exit(1)
 
-    tokey = cmdargs.tokey[-16:].upper()
+    to_rowid = wotmate.get_pubrow_id(cursor, cmdargs.key_id[0])
+    if to_rowid is None:
+        sys.exit(1)
 
-    key_paths = get_key_paths(cursor, fromkey, tokey, cmdargs.maxdepth, cmdargs.maxpaths)
+    key_paths = get_key_paths(cursor, from_rowid, to_rowid, cmdargs.maxdepth, cmdargs.maxpaths)
 
     graph = pd.Dot(
         graph_type='digraph',
@@ -148,3 +141,4 @@ if __name__ == '__main__':
     chunks = cmdargs.out.split('.')
     outformat = chunks[-1]
     graph.write(cmdargs.out, format=outformat)
+    logger.info('Wrote %s' % cmdargs.out)
