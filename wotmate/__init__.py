@@ -47,6 +47,15 @@ logger = logging.getLogger(__name__)
 # convenience caching so we avoid redundant lookups
 _all_signed_by_cache = {}
 _all_sigs_cache = {}
+_all_uiddata_cache = {}
+_seenkeys = []
+
+
+def get_uiddata_by_pubrow(c, p_rowid):
+    if p_rowid not in _all_uiddata_cache:
+        c.execute('SELECT uiddata FROM uid WHERE pubrowid=?', (p_rowid,))
+        _all_uiddata_cache[p_rowid] = c.fetchone()[0]
+    return _all_uiddata_cache[p_rowid]
 
 
 def get_logger(quiet=False):
@@ -210,14 +219,14 @@ def make_graph_node(c, p_rowid, show_trust=False):
         show = ''
 
     if algo in ALGOS.keys():
-        algosize = '%s %s' % (ALGOS[algo], size)
+        keyline = '{%s %s|%s}' % (ALGOS[algo], size, kid)
     else:
-        algosize = 'ALGO? %s' % size
+        keyline = '{%s}' % kid
 
     if show_trust:
-        anode.set('label', '{{%s\n%s|{val: %s|tru: %s}}|{%s|%s}}' % (name, show, val, trust, algosize, kid))
+        anode.set('label', '{{%s\n%s|{val: %s|tru: %s}}|%s}' % (name, show, val, trust, keyline))
     else:
-        anode.set('label', '{%s\n%s|{%s|%s}}' % (name, show, algosize, kid))
+        anode.set('label', '{%s\n%s|%s}' % (name, show, keyline))
     return anode
 
 
@@ -244,7 +253,7 @@ def cull_redundant_paths(paths, maxpaths=None):
     return culled
 
 
-def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, seenkeys, ignorekeys):
+def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys):
     depth += 1
     sigs = get_all_signed_by(c, t_p_rowid)
 
@@ -257,23 +266,23 @@ def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, seenkeys, ignore
         return None
 
     for (s_p_rowid,) in sigs:
-        if (depth, s_p_rowid) in seenkeys:
-            continue
-        if s_p_rowid in ignorekeys:
+        if s_p_rowid in ignorekeys or (depth, s_p_rowid) in _seenkeys:
             continue
 
-        subchain = get_shortest_path(c, s_p_rowid, b_p_rowid, depth, maxdepth, seenkeys, ignorekeys)
+        subchain = get_shortest_path(c, s_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys)
         if subchain:
             if shortest is None or len(shortest) > len(subchain):
                 shortest = subchain
-                seenkeys.append((depth, s_p_rowid))
+                _seenkeys.append((depth, s_p_rowid))
                 # no need to go any deeper than current shortest
                 maxdepth = depth - 1 + len(shortest)
         else:
-            # if we returned with None, then this key is a dead-end at this depth
-            seenkeys.append((depth, s_p_rowid))
+            # if we returned with None, then this key is a dead-end at this and lower depths
+            for _d in range(depth, maxdepth):
+                _seenkeys.append((_d, s_p_rowid))
 
     if shortest is not None:
+        _seenkeys.append((depth, t_p_rowid))
         return [t_p_rowid] + shortest
 
     return None

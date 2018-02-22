@@ -1,7 +1,7 @@
 .idea
-graph.*
-siginfo.db
-ownertrust.txt
+*.db
+*.png
+*.wot
 keyring.kbx
 keyring.gpg
 *.pyc

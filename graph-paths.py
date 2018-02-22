@@ -50,13 +50,17 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
         sys.exit(1)
 
     logger.info('Found %s keys signed by top key' % len(sigs))
+    lookedat = 0
 
     paths = []
     ignorekeys = [item for sublist in sigs for item in sublist]
     for (s_p_rowid,) in sigs:
-        path = wotmate.get_shortest_path(c, s_p_rowid, b_p_rowid, 0, maxdepth-1, [], ignorekeys)
+        lookedat += 1
+        logger.info('Trying "%s" (%s/%s)' %
+                    (wotmate.get_uiddata_by_pubrow(c, s_p_rowid), lookedat, len(sigs)))
+        path = wotmate.get_shortest_path(c, s_p_rowid, b_p_rowid, 0, maxdepth-1, ignorekeys)
         if path:
-            logger.info('Found a path with %s members' % len(path))
+            logger.info('\- found a path with %s members' % len(path))
             paths.append([t_p_rowid] + path)
             ignorekeys += path
 

@@ -39,14 +39,21 @@ def get_key_paths(c, b_p_rowid, maxdepth=5):
 
     paths = []
     ignorekeys = [item for sublist in f_p_rowids for item in sublist]
+    lookedat = 0
 
     logger.info('Found %s fully trusted keys in the db' % len(f_p_rowids))
     for (f_p_rowid,) in f_p_rowids:
-        path = wotmate.get_shortest_path(c, f_p_rowid, b_p_rowid, 0, maxdepth-1, [], ignorekeys)
+        lookedat += 1
+        logger.info('Trying "%s" (%s/%s)' %
+                    (wotmate.get_uiddata_by_pubrow(c, f_p_rowid), lookedat, len(f_p_rowids)))
+
+        path = wotmate.get_shortest_path(c, f_p_rowid, b_p_rowid, 0, maxdepth-1, ignorekeys)
 
         if path:
-            logger.info('Found a path with %s members' % len(path))
+            logger.info('\- found a path with %s members' % len(path))
             paths.append(path)
+            # we want to find maximum paths, so we unset _seenkeys
+            wotmate._seenkeys = []
             ignorekeys += path
 
     if not paths:
