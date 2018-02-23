@@ -29,7 +29,7 @@ import wotmate
 def keyring_populate_all_pubkeys(c, use_weak):
     logger.info('Loading all valid pubkeys')
     keyid_rowid_map = {}
-    for line in wotmate.gpg_run_command(['--list-public-keys'], ['pub:']):
+    for line in wotmate.gpg_run_command(['--list-public-keys'], [b'pub:']):
         fields = wotmate.gpg_get_fields(line)
         # is this key expired/revoked or is otherwise invalid?
         if fields[1] in ('e', 'r', 'i'):
@@ -82,7 +82,7 @@ def keyring_populate_uid_sig_data(c, keyid_rowid_map):
     sigcount = 0
     seen_pubkeys = 0
 
-    for line in wotmate.gpg_run_command(['--list-sigs'], ['pub:', 'uid:', 'sig:', 'rev:']):
+    for line in wotmate.gpg_run_command(['--list-sigs'], [b'pub:', b'uid:', b'sig:', b'rev:']):
         if line.startswith(b'pub:'):
             fields = wotmate.gpg_get_fields(line)
             pubkeyid = fields[4]

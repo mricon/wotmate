@@ -60,7 +60,7 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
                     (wotmate.get_uiddata_by_pubrow(c, s_p_rowid), lookedat, len(sigs)))
         path = wotmate.get_shortest_path(c, s_p_rowid, b_p_rowid, 0, maxdepth-1, ignorekeys)
         if path:
-            logger.info('\- found a path with %s members' % len(path))
+            logger.info('`- found a path with %s members' % len(path))
             paths.append([t_p_rowid] + path)
             ignorekeys += path
 

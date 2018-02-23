@@ -91,12 +91,12 @@ def gpg_run_command(args, matchonly=()):
         sys.stderr.write(error.decode('utf-8'))
 
     lines = []
+    logger.info('Processing the output...')
     for line in output.split(b'\n'):
         if line == b'' or line[0] == b'#':
             continue
         if len(matchonly):
-            for umatch in matchonly:
-                match = umatch.encode('utf-8')
+            for match in matchonly:
                 if line.startswith(match):
                     lines.append(line)
                     continue
@@ -107,8 +107,8 @@ def gpg_run_command(args, matchonly=()):
 
 
 def gpg_get_fields(bline):
+    line = bline.decode('utf8', 'ignore')
     # gpg uses \x3a to indicate an encoded colon, so we explode and de-encode
-    line = bline.decode('utf-8')
     fields = [rawchunk.replace('\\x3a', ':') for rawchunk in line.split(':')]
     # fields 5 and 6 are timestamps, so make them python datetime
     if len(fields[5]):

@@ -50,7 +50,7 @@ def get_key_paths(c, b_p_rowid, maxdepth=5):
         path = wotmate.get_shortest_path(c, f_p_rowid, b_p_rowid, 0, maxdepth-1, ignorekeys)
 
         if path:
-            logger.info('\- found a path with %s members' % len(path))
+            logger.info('`- found a path with %s members' % len(path))
             paths.append(path)
             # we want to find maximum paths, so we unset _seenkeys
             wotmate._seenkeys = []
