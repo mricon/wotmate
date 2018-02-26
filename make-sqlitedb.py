@@ -26,109 +26,130 @@ import sqlite3
 import wotmate
 
 
-def keyring_populate_all_pubkeys(c, use_weak):
+def keyring_load_pub_uid(c, use_weak):
     logger.info('Loading all valid pubkeys')
-    keyid_rowid_map = {}
-    for line in wotmate.gpg_run_command(['--list-public-keys'], [b'pub:']):
+    uid_hash_rowid_map = {}
+    pub_keyid_rowid_map = {}
+    current_pubkey = None
+    current_pubrowid = None
+    is_primary = 1
+    ignored_keys = 0
+    ignored_uids = 0
+    for line in wotmate.gpg_run_command(['--list-public-keys'], [b'pub:', b'uid']):
         fields = wotmate.gpg_get_fields(line)
-        # is this key expired/revoked or is otherwise invalid?
-        if fields[1] in ('e', 'r', 'i'):
-            continue
-        # is this key too weak to bother considering it?
-        if not use_weak and (fields[3] in ('1', '17') and int(fields[2]) < 2048):
-            logger.info('Ignoring weak key: %s' % fields[4])
-            continue
+        if fields[0] == 'pub':
+            # is this key expired/revoked or is otherwise invalid?
+            if fields[1] in ('e', 'r', 'i'):
+                ignored_keys += 1
+                continue
+            # is this key too weak to bother considering it?
+            if not use_weak and (fields[3] in ('1', '17') and int(fields[2]) < 2048):
+                #logger.info('Ignoring weak key: %s' % fields[4])
+                ignored_keys += 1
+                continue
 
-        data = (
-                fields[4],
-                fields[1],
-                fields[2],
-                fields[3],
-                fields[5],
-                fields[6],
-                fields[8],
-               )
-        c.execute('INSERT INTO pub VALUES (?,?,?,?,?,?,?)', data)
-        keyid_rowid_map[fields[4]] = c.lastrowid
+            data = (
+                    fields[4],
+                    fields[1],
+                    fields[2],
+                    fields[3],
+                    fields[5],
+                    fields[6],
+                    fields[8],
+                   )
+            c.execute('INSERT INTO pub VALUES (?,?,?,?,?,?,?)', data)
+            current_pubkey = fields[4]
+            current_pubrowid = c.lastrowid
+            is_primary = 1
 
-    logger.info('Loaded %s pubkeys' % len(keyid_rowid_map))
-    return keyid_rowid_map
+        elif fields[0] == 'uid':
+            if fields[1] in ('e', 'r', 'i'):
+                ignored_uids += 1
+                continue
+
+            if current_pubrowid is not None:
+                data = (
+                    current_pubrowid,
+                    fields[1],
+                    fields[5],
+                    fields[6],
+                    fields[9],
+                    is_primary,
+                )
+                c.execute('INSERT INTO uid VALUES (?,?,?,?,?,?)', data)
+                uid_hash_rowid_map[(current_pubkey, fields[7])] = c.lastrowid
+
+                if is_primary:
+                    pub_keyid_rowid_map[current_pubkey] = (current_pubrowid, c.lastrowid)
+
+                is_primary = 0
+            else:
+                ignored_uids += 1
+        else:
+            pass
+
+    logger.info('Loaded %s pubkeys (%s ignored)' % (len(pub_keyid_rowid_map), ignored_keys))
+    logger.info('Loaded %s uids (%s ignored)' % (len(uid_hash_rowid_map), ignored_uids))
+    return pub_keyid_rowid_map, uid_hash_rowid_map
 
 
-def store_uid(c, pubrowid, fields, is_primary):
-    data = (
-            pubrowid,
-            fields[1],
-            fields[5],
-            fields[6],
-            fields[9],
-            is_primary,
-            )
-    c.execute('INSERT INTO uid VALUES (?,?,?,?,?,?)', data)
-    return c.lastrowid
-
-
-def keyring_populate_uid_sig_data(c, keyid_rowid_map):
-    logger.info('Loading uid and signature data')
+def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
+    logger.info('Loading signature data')
     sigquery = 'INSERT INTO sig VALUES (?,?,?,?,?)'
     # we use these to track which is the current pubkey/uid we're looking at
     pubkeyid = None
-    pubrowid = None
-    is_primary = 1
     uidrowid = None
     uidsigs = {}
     revsigs = []
-    uidcount = 0
+    is_revuid = False
     sigcount = 0
-    seen_pubkeys = 0
+    ignored_sigs = 0
 
-    for line in wotmate.gpg_run_command(['--list-sigs'], [b'pub:', b'uid:', b'sig:', b'rev:']):
-        if line.startswith(b'pub:'):
-            fields = wotmate.gpg_get_fields(line)
-            pubkeyid = fields[4]
-            if pubkeyid not in keyid_rowid_map.keys():
-                continue
+    for line in wotmate.gpg_run_command(['--list-sigs', '--fast-list-mode'],
+                                        [b'pub:', b'uid', b'sig:', b'rev:']):
 
-            pubrowid = keyid_rowid_map[pubkeyid]
-            is_primary = 1
-            seen_pubkeys += 1
-            uidrowid = None
+        fields = wotmate.gpg_get_fields(line)
 
-        elif line.startswith(b'uid:'):
-            if uidsigs:
-                # store all sigs seen for previous uid
-                c.executemany(sigquery, uidsigs.values())
-                sigcount += len(uidsigs)
-                uidsigs = {}
-                revsigs = []
-
-            try:
-                fields = wotmate.gpg_get_fields(line)
-            except UnicodeDecodeError:
-                # Broken uid, ignore it
-                uidrowid = None
-                continue
-
-            # is this uid expired/revoked or is otherwise invalid?
-            if pubrowid is None or fields[1] in ('e', 'r', 'i'):
-                uidrowid = None
-                continue
-
-            uidrowid = store_uid(c, pubrowid, fields, is_primary)
-            uidcount += 1
-            is_primary = 0
+        if uidsigs and fields[0] in ('pub', 'uid'):
+            c.executemany(sigquery, uidsigs.values())
+            sigcount += len(uidsigs)
+            uidsigs = {}
             revsigs = []
 
-        elif line.startswith(b'sig:') or line.startswith(b'rev:'):
-            # if we don't have a valid uidrowid, skip this until we do
-            if uidrowid is None:
+        if fields[0] == 'pub':
+            uidrowid = None
+            pubkeyid = None
+            is_revuid = False
+            if fields[4] in pub_keyid_rowid_map.keys():
+                pubkeyid = fields[4]
+
+        elif fields[0] == 'uid':
+            if not pubkeyid:
+                continue
+            # is this uid expired/revoked or is otherwise invalid?
+            if fields[1] in ('e', 'r', 'i'):
+                is_revuid = True
+                continue
+            try:
+                uidrowid = uid_hash_rowid_map[(pubkeyid, fields[7])]
+            except IndexError:
+                # unknown uid somehow... ignore it
                 continue
 
-            fields = wotmate.gpg_get_fields(line)
+        elif fields[0] in ('sig', 'rev'):
+            if not pubkeyid or is_revuid:
+                ignored_sigs += 1
+                continue
+            # some gpg versions, when using --fast-list-mode, will not show UID
+            # entries, so for those cases we use the primary UID of the pubkey
+            if uidrowid is None:
+                uidrowid = pub_keyid_rowid_map[pubkeyid][1]
+
             sigkeyid = fields[4]
 
             # ignore self-sigs
             if sigkeyid == pubkeyid:
+                ignored_sigs += 1
                 continue
 
             # We use this map to eject revoked sigs before we store them
@@ -140,11 +161,13 @@ def keyring_populate_uid_sig_data(c, keyid_rowid_map):
                     if sigkeyid in uidsigs.keys():
                         # remove this signature from our sigs to store
                         del(uidsigs[sigkeyid])
+                        ignored_sigs += 1
                     # add to revsigs, so we ignore this sig if we see it
                     revsigs.append(sigkeyid)
                     continue
 
                 elif sigtype < 0x10 or sigtype > 0x13:
+                    ignored_sigs += 1
                     continue
 
             else:
@@ -154,13 +177,14 @@ def keyring_populate_uid_sig_data(c, keyid_rowid_map):
 
             # has this sig been revoked?
             if sigkeyid in revsigs:
+                ignored_sigs += 1
                 continue
 
             # do we have the key that signed it?
-            if sigkeyid in keyid_rowid_map.keys():
+            if sigkeyid in pub_keyid_rowid_map.keys():
                 uidsigs[sigkeyid] = (
                     uidrowid,
-                    keyid_rowid_map[sigkeyid],
+                    pub_keyid_rowid_map[sigkeyid][0],
                     fields[5],
                     fields[6],
                     sigtype
@@ -170,7 +194,7 @@ def keyring_populate_uid_sig_data(c, keyid_rowid_map):
         c.executemany(sigquery, uidsigs.values())
         sigcount += len(uidsigs)
 
-    logger.info('Loaded %s valid uids and %s valid sigs' % (uidcount, sigcount))
+    logger.info('Loaded %s valid sigs (%s ignored)' % (sigcount, ignored_sigs))
 
 
 def wotsap_populate_keys(c, fh, size):
@@ -307,8 +331,8 @@ if __name__ == '__main__':
     wotmate.init_sqlite_db(cursor)
 
     if not cmdargs.wotsap:
-        kr_map = keyring_populate_all_pubkeys(cursor, cmdargs.use_weak)
-        keyring_populate_uid_sig_data(cursor, kr_map)
+        (pub_map, uid_map) = keyring_load_pub_uid(cursor, cmdargs.use_weak)
+        keyring_load_sig_data(cursor, pub_map, uid_map)
     else:
         convert_wotsap(cursor, cmdargs.wotsap)
 

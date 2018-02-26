@@ -73,7 +73,7 @@ def get_logger(quiet=False):
 
 
 def gpg_run_command(args, matchonly=()):
-    args = [GPGBIN, '--with-colons'] + args
+    args = [GPGBIN, '--with-colons', '--batch'] + args
 
     env = {}
 
