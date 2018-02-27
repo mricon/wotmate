@@ -49,11 +49,17 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
         logger.critical('Top key did not sign any keys')
         sys.exit(1)
 
+    ignorekeys = [item for sublist in sigs for item in sublist] + [t_p_rowid]
+
+    if b_p_rowid in ignorekeys:
+        logger.info('Bottom key is signed directly by the top key')
+        return [[t_p_rowid, b_p_rowid]]
+
     logger.info('Found %s keys signed by top key' % len(sigs))
     lookedat = 0
 
     paths = []
-    ignorekeys = [item for sublist in sigs for item in sublist]
+
     for (s_p_rowid,) in sigs:
         lookedat += 1
         logger.info('Trying "%s" (%s/%s)' %
@@ -62,7 +68,7 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
         if path:
             logger.info('`- found a path with %s members' % len(path))
             paths.append([t_p_rowid] + path)
-            ignorekeys += path
+            ignorekeys.append(path[1])
 
     if not paths:
         logger.critical('No paths found.')
