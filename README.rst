@@ -44,3 +44,18 @@ Example usage:
    :width: 100%
    :align: center
 
+
+graph-pgp-pathfinder.py
+~~~~~~~~~~~~~~~~~~~~~~~
+If you don't want to use a local source of PGP key info, you can query the
+PGP Pathfinder service, hosted at https://pgp.cs.uu.nl/. Note, that both top
+and bottom keys must be in the "strong set" as defined by Wotsap.
+
+Example usage:
+
+    ./graph-pgp-pathfinder.py 79BE3E4300411886 89A4A8DEECE1C170
+
+.. image:: https://raw.githubusercontent.com/mricon/wotmate/master/examples/pgp-pathfinder.png
+   :alt: Example graph produced
+   :width: 100%
+   :align: center

@@ -68,7 +68,8 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
         if path:
             logger.info('`- found a path with %s members' % len(path))
             paths.append([t_p_rowid] + path)
-            ignorekeys.append(path[1])
+            if len(path) > 2:
+                ignorekeys.append(path[-2])
 
     if not paths:
         logger.critical('No paths found.')
@@ -112,7 +113,6 @@ if __name__ == '__main__':
 
     cmdargs = ap.parse_args()
 
-    global logger
     logger = wotmate.get_logger(cmdargs.quiet)
 
     if len(cmdargs.key_id) != 1:

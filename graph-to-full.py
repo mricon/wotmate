@@ -54,7 +54,8 @@ def get_key_paths(c, b_p_rowid, maxdepth=5):
             paths.append(path)
             # we want to find maximum paths, so we unset _seenkeys
             wotmate._seenkeys = []
-            ignorekeys.append(path[1])
+            if len(path) > 2:
+                ignorekeys.append(path[-2])
 
     if not paths:
         logger.critical('No paths found to any fully trusted keys')
@@ -94,7 +95,6 @@ if __name__ == '__main__':
 
     cmdargs = ap.parse_args()
 
-    global logger
     logger = wotmate.get_logger(cmdargs.quiet)
 
     dbconn = sqlite3.connect(cmdargs.dbfile)

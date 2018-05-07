@@ -1,6 +1,6 @@
 .idea
 *.db
-*.png
+graph.png
 *.wot
 keyring.kbx
 keyring.gpg
