@@ -69,7 +69,7 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
             logger.info('`- found a path with %s members' % len(path))
             paths.append([t_p_rowid] + path)
             if len(path) > 2:
-                ignorekeys.append(path[-2])
+                ignorekeys += path[1:-2]
 
     if not paths:
         logger.critical('No paths found.')

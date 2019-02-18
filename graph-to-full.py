@@ -55,7 +55,7 @@ def get_key_paths(c, b_p_rowid, maxdepth=5):
             # we want to find maximum paths, so we unset _seenkeys
             wotmate._seenkeys = []
             if len(path) > 2:
-                ignorekeys.append(path[-2])
+                ignorekeys += path[1:-1]
 
     if not paths:
         logger.critical('No paths found to any fully trusted keys')
