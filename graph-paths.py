@@ -29,58 +29,6 @@ import wotmate
 import pydotplus.graphviz as pd
 
 
-def get_u_key(c):
-    c.execute('''SELECT rowid 
-                   FROM pub
-                  WHERE ownertrust = 'u' 
-                  LIMIT 1
-    ''')
-    try:
-        (p_rowid,) = c.fetchone()
-        return p_rowid
-    except ValueError:
-        return None
-
-
-def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
-    # Next, get rowids of all keys signed by top key
-    sigs = wotmate.get_all_signed_by(c, t_p_rowid)
-    if not sigs:
-        logger.critical('Top key did not sign any keys')
-        sys.exit(1)
-
-    ignorekeys = [item for sublist in sigs for item in sublist] + [t_p_rowid]
-
-    if b_p_rowid in ignorekeys:
-        logger.info('Bottom key is signed directly by the top key')
-        return [[t_p_rowid, b_p_rowid]]
-
-    logger.info('Found %s keys signed by top key' % len(sigs))
-    lookedat = 0
-
-    paths = []
-
-    for (s_p_rowid,) in sigs:
-        lookedat += 1
-        logger.info('Trying "%s" (%s/%s)' %
-                    (wotmate.get_uiddata_by_pubrow(c, s_p_rowid), lookedat, len(sigs)))
-        path = wotmate.get_shortest_path(c, s_p_rowid, b_p_rowid, 0, maxdepth-1, ignorekeys)
-        if path:
-            logger.info('`- found a path with %s members' % len(path))
-            paths.append([t_p_rowid] + path)
-            if len(path) > 2:
-                ignorekeys += path[1:-2]
-
-    if not paths:
-        logger.critical('No paths found.')
-        sys.exit(1)
-
-    culled = wotmate.cull_redundant_paths(paths, maxpaths)
-    logger.info('%s paths left after culling' % len(culled))
-
-    return culled
-
-
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser(
@@ -123,7 +71,7 @@ if __name__ == '__main__':
     cursor = dbconn.cursor()
 
     if not cmdargs.fromkey:
-        from_rowid = get_u_key(cursor)
+        from_rowid = wotmate.get_u_key(cursor)
         if from_rowid is None:
             logger.critical('Could not find ultimate-trust key, try specifying --fromkey')
             sys.exit(1)
@@ -136,7 +84,7 @@ if __name__ == '__main__':
     if to_rowid is None:
         sys.exit(1)
 
-    key_paths = get_key_paths(cursor, from_rowid, to_rowid, cmdargs.maxdepth, cmdargs.maxpaths)
+    key_paths = wotmate.get_key_paths(cursor, from_rowid, to_rowid, cmdargs.maxdepth, cmdargs.maxpaths)
 
     graph = pd.Dot(
         graph_type='digraph',

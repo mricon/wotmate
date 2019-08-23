@@ -35,7 +35,7 @@ def keyring_load_pub_uid(c, use_weak):
     is_primary = 1
     ignored_keys = 0
     ignored_uids = 0
-    for line in wotmate.gpg_run_command(['--list-public-keys'], [b'pub:', b'uid']):
+    for line in wotmate.gpg_get_lines(['--list-public-keys'], [b'pub:', b'uid']):
         fields = wotmate.gpg_get_fields(line)
         if fields[0] == 'pub':
             # is this key expired/revoked or is otherwise invalid?
@@ -105,8 +105,8 @@ def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
     sigcount = 0
     ignored_sigs = 0
 
-    for line in wotmate.gpg_run_command(['--list-sigs', '--fast-list-mode'],
-                                        [b'pub:', b'uid', b'sig:', b'rev:']):
+    for line in wotmate.gpg_get_lines(['--list-sigs', '--fast-list-mode'],
+                                      [b'pub:', b'uid', b'sig:', b'rev:']):
 
         fields = wotmate.gpg_get_fields(line)
 

@@ -66,23 +66,27 @@ def get_logger(quiet=False):
     if quiet:
         ch.setLevel(logging.CRITICAL)
     else:
-        ch.setLevel(logging.DEBUG)
+        ch.setLevel(logging.INFO)
 
     logger.addHandler(ch)
     return logger
 
 
-def gpg_run_command(args, matchonly=()):
-    args = [GPGBIN, '--with-colons', '--batch'] + args
+def gpg_run_command(args, with_colons=True):
+    cmdargs = [GPGBIN, '--batch']
+    if with_colons:
+        cmdargs += ['--with-colons']
+
+    cmdargs += args
 
     env = {}
 
     if GNUPGHOME is not None:
         env['GNUPGHOME'] = GNUPGHOME
 
-    logger.info('Running %s...' % ' '.join(args))
+    logger.debug('Running %s...' % ' '.join(cmdargs))
 
-    (output, error) = subprocess.Popen(args, stdout=subprocess.PIPE,
+    (output, error) = subprocess.Popen(cmdargs, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE,
                                        env=env).communicate()
     output = output.strip()
@@ -90,8 +94,13 @@ def gpg_run_command(args, matchonly=()):
     if len(error.strip()):
         sys.stderr.write(error.decode('utf-8'))
 
+    return output
+
+
+def gpg_get_lines(args, matchonly=()):
+    output = gpg_run_command(args)
     lines = []
-    logger.info('Processing the output...')
+    logger.debug('Processing the output...')
     for line in output.split(b'\n'):
         if line == b'' or line[0] == b'#':
             continue
@@ -254,6 +263,10 @@ def cull_redundant_paths(paths, maxpaths=None):
 
 
 def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys):
+    global _seenkeys
+    # Zero out seenkeys at 0-depth
+    if depth == 0:
+        _seenkeys = []
     depth += 1
     sigs = get_all_signed_by(c, t_p_rowid)
 
@@ -343,3 +356,57 @@ def get_pubrow_id(c, whatnot):
         logger.critical('Nothing found matching "%s"' % whatnot)
 
     return None
+
+
+def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
+    # Next, get rowids of all keys signed by top key
+    sigs = get_all_signed_by(c, t_p_rowid)
+    if not sigs:
+        logger.critical('Top key did not sign any keys')
+        sys.exit(1)
+
+    ignorekeys = [item for sublist in sigs for item in sublist] + [t_p_rowid]
+
+    if b_p_rowid in ignorekeys:
+        logger.debug('Bottom key is signed directly by the top key')
+        return [[t_p_rowid, b_p_rowid]]
+
+    logger.debug('Found %s keys signed by top key' % len(sigs))
+    lookedat = 0
+
+    paths = []
+
+    for (s_p_rowid,) in sigs:
+        lookedat += 1
+        # logger.debug('Trying "%s" (%s/%s)', get_uiddata_by_pubrow(c, s_p_rowid), lookedat, len(sigs))
+        path = get_shortest_path(c, s_p_rowid, b_p_rowid, 0, maxdepth-1, ignorekeys)
+        if path:
+            logger.debug('`- found a path with %s members' % len(path))
+            paths.append([t_p_rowid] + path)
+            if len(path) > 2:
+                ignorekeys += path[1:-2]
+
+    if not paths:
+        logger.info('No valid paths between %s and %s',
+                    get_uiddata_by_pubrow(c, t_p_rowid), get_uiddata_by_pubrow(c, b_p_rowid))
+        return []
+
+    culled = cull_redundant_paths(paths, maxpaths)
+    logger.debug('%s paths left after culling' % len(culled))
+
+    return culled
+
+
+def get_u_key(c):
+    c.execute('''SELECT rowid 
+                   FROM pub
+                  WHERE ownertrust = 'u' 
+                  LIMIT 1
+    ''')
+    try:
+        (p_rowid,) = c.fetchone()
+        return p_rowid
+    except ValueError:
+        return None
+
+
