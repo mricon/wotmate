@@ -33,7 +33,7 @@ import pydotplus.graphviz as pd
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser(
-        description='Make a graph of paths from any key to any key',
+        description='Export a keyring as individual .asc files with graphs',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 

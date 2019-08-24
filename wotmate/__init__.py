@@ -406,7 +406,7 @@ def get_u_key(c):
     try:
         (p_rowid,) = c.fetchone()
         return p_rowid
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
 
