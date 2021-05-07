@@ -14,17 +14,13 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-from __future__ import (absolute_import,
-                        division,
-                        print_function,
-                        unicode_literals)
-
 __author__ = 'Konstantin Ryabitsev <konstantin@linuxfoundation.org>'
 
 import sys
 import subprocess
 import logging
+
+from typing import Optional
 
 from datetime import datetime
 import pydotplus.graphviz as pd
@@ -39,16 +35,16 @@ ALGOS = {
 }
 
 DB_VERSION = 1
-GPGBIN = '/usr/bin/gpg2'
+GPGBIN = '/usr/bin/gpg'
 GNUPGHOME = None
 
 logger = logging.getLogger(__name__)
 
 # convenience caching so we avoid redundant lookups
-_all_signed_by_cache = {}
-_all_sigs_cache = {}
-_all_uiddata_cache = {}
-_seenkeys = []
+_all_signed_by_cache = dict()
+_all_sigs_cache = dict()
+_all_uiddata_cache = dict()
+_seenkeys = set()
 
 
 def get_uiddata_by_pubrow(c, p_rowid):
@@ -72,27 +68,24 @@ def get_logger(quiet=False):
     return logger
 
 
-def gpg_run_command(args, with_colons=True):
+def gpg_run_command(args: list, with_colons: bool = True, stdin: Optional[bytes] = None) -> bytes:
     cmdargs = [GPGBIN, '--batch']
     if with_colons:
         cmdargs += ['--with-colons']
 
     cmdargs += args
-
-    env = {}
-
+    env = None
     if GNUPGHOME is not None:
-        env['GNUPGHOME'] = GNUPGHOME
+        env = {'GNUPGHOME': GNUPGHOME}
 
     logger.debug('Running %s...' % ' '.join(cmdargs))
 
-    (output, error) = subprocess.Popen(cmdargs, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       env=env).communicate()
+    sp = subprocess.Popen(cmdargs, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    (output, error) = sp.communicate(input=stdin)
     output = output.strip()
 
     if len(error.strip()):
-        sys.stderr.write(error.decode('utf-8'))
+        sys.stderr.buffer.write(error)
 
     return output
 
@@ -266,7 +259,7 @@ def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys):
     global _seenkeys
     # Zero out seenkeys at 0-depth
     if depth == 0:
-        _seenkeys = []
+        _seenkeys = set()
     depth += 1
     sigs = get_all_signed_by(c, t_p_rowid)
 
@@ -286,16 +279,16 @@ def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys):
         if subchain:
             if shortest is None or len(shortest) > len(subchain):
                 shortest = subchain
-                _seenkeys.append((depth, s_p_rowid))
+                _seenkeys.add((depth, s_p_rowid))
                 # no need to go any deeper than current shortest
                 maxdepth = depth - 1 + len(shortest)
         else:
             # if we returned with None, then this key is a dead-end at this and lower depths
             for _d in range(depth, maxdepth):
-                _seenkeys.append((_d, s_p_rowid))
+                _seenkeys.add((_d, s_p_rowid))
 
     if shortest is not None:
-        _seenkeys.append((depth, t_p_rowid))
+        _seenkeys.add((depth, t_p_rowid))
         return [t_p_rowid] + shortest
 
     return None
@@ -408,5 +401,3 @@ def get_u_key(c):
         return p_rowid
     except (ValueError, TypeError):
         return None
-
-

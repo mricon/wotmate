@@ -14,17 +14,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-from __future__ import (absolute_import,
-                        division,
-                        print_function,
-                        unicode_literals)
-
 __author__ = 'Konstantin Ryabitsev <konstantin@linuxfoundation.org>'
 
 import sys
 import os
 import sqlite3
+import pathlib
+
+from email.utils import parseaddr
+from urllib.parse import quote_plus
 
 import wotmate
 import pydotplus.graphviz as pd
@@ -53,7 +51,7 @@ if __name__ == '__main__':
     ap.add_argument('--dbfile', default='siginfo.db',
                     help='Sig database to use')
     ap.add_argument('--gpgbin',
-                    default='/usr/bin/gpg2',
+                    default='/usr/bin/gpg',
                     help='Location of the gpg binary to use')
     ap.add_argument('--gnupghome',
                     help='Set this as gnupghome instead of using the default')
@@ -67,6 +65,9 @@ if __name__ == '__main__':
     ap.add_argument('--key-export-options', dest='key_export_options',
                     default='export-attributes',
                     help='The value to pass to gpg --export-options')
+    ap.add_argument('--gen-b4-keyring', action='store_true', dest='gen_b4_keyring',
+                    default=False,
+                    help='Generate a b4-style symlinked keyring as well')
 
     cmdargs = ap.parse_args()
 
@@ -108,6 +109,7 @@ if __name__ == '__main__':
         os.mkdir(graphdir)
 
     kcount = wcount = 0
+    my_symlinks = set()
     for (to_rowid, kid, uiddata) in c.fetchall():
         kcount += 1
         # First, export the key
@@ -117,8 +119,8 @@ if __name__ == '__main__':
         # Do we already have a file in place?
         if os.path.exists(keyout):
             # Load it up and see if it's different
-            with open(keyout, 'r') as fin:
-                old_keyexport = fin.read().encode('utf-8')
+            with open(keyout, 'rb') as fin:
+                old_keyexport = fin.read()
                 if old_keyexport.find(keydata) > 0:
                     logger.debug('No changes for %s', kid)
                     continue
@@ -127,16 +129,43 @@ if __name__ == '__main__':
         args = ['--list-options', 'show-notations', '--list-options',
                 'no-show-uid-validity', '--with-subkey-fingerprints', '--list-key', kid]
         header = wotmate.gpg_run_command(args, with_colons=False)
-        keyexport = header + b'\n\n' + keydata
+        keyexport = header + b'\n\n' + keydata + b'\n'
 
         key_paths = wotmate.get_key_paths(c, from_rowid, to_rowid, cmdargs.maxdepth, cmdargs.maxpaths)
         if not len(key_paths):
             logger.debug('Skipping %s due to invalid WoT', kid)
             continue
 
-        with open(keyout, 'w') as fout:
-            fout.write(keyexport.decode('utf-8', 'ignore'))
+        with open(keyout, 'wb') as fout:
+            fout.write(keyexport)
             logger.info('Wrote %s', keyout)
+
+        if cmdargs.gen_b4_keyring:
+            # Grab all uid lines from the header
+            for line in header.split(b'\n'):
+                if not line.startswith(b'uid'):
+                    continue
+                line = line[3:].decode('utf-8', 'ignore').strip()
+                if line:
+                    parts = parseaddr(line)
+                    if not len(parts[1]) or parts[1].count('@') != 1:
+                        continue
+                    local, domain = parts[1].split('@', 1)
+                    kpath = os.path.join(cmdargs.outdir, '.keyring', 'openpgp', quote_plus(domain), quote_plus(local))
+                    pathlib.Path(kpath).mkdir(parents=True, exist_ok=True)
+                    spath = os.path.join(kpath, 'default')
+                    tpath = os.path.relpath(keyout, kpath)
+                    if os.path.islink(spath):
+                        if spath in my_symlinks:
+                            # There's multiple keys with the same identity. First one wins, for the lack of a
+                            # better solution that is also sane.
+                            logger.info('Notice: multiple keys with the same UID %s', parts[1])
+                            continue
+                        os.unlink(spath)
+                        logger.info('Notice: fixing symlink for %s', parts[1])
+                    os.symlink(tpath, spath)
+                    my_symlinks.add(spath)
+                    logger.info('Symlinked %s to %s', kid, spath)
 
         graph = pd.Dot(
             graph_type='digraph',
@@ -153,4 +182,3 @@ if __name__ == '__main__':
         wcount += 1
 
     logger.info('Processed %s keys, made %s changes', kcount, wcount)
-

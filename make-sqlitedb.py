@@ -15,13 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import (absolute_import,
-                        division,
-                        print_function,
-                        unicode_literals)
-
 import os
-import sys
 import sqlite3
 import wotmate
 
@@ -44,7 +38,7 @@ def keyring_load_pub_uid(c, use_weak):
                 continue
             # is this key too weak to bother considering it?
             if not use_weak and (fields[3] in ('1', '17') and int(fields[2]) < 2048):
-                #logger.info('Ignoring weak key: %s' % fields[4])
+                # logger.info('Ignoring weak key: %s' % fields[4])
                 ignored_keys += 1
                 continue
 
@@ -197,95 +191,6 @@ def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
     logger.info('Loaded %s valid sigs (%s ignored)' % (sigcount, ignored_sigs))
 
 
-def wotsap_populate_keys(c, fh, size):
-    logger.info('Converting keys...')
-    readbytes = 0
-    keycount = 0
-    while readbytes < size:
-        key = fh.read(8)
-        readbytes += 8
-        # wotsap doesn't give us useful info about the key, just the ID
-        c.execute('''INSERT INTO pub (keyid) VALUES (?)''', (key.hex().upper(),))
-        keycount += 1
-    logger.info('Imported %s keys' % keycount)
-
-
-def wotsap_populate_names(c, fh, size):
-    logger.info('Converting names...')
-    readbytes = 0
-    p_rowid = 1
-    namecount = 0
-    while readbytes < size:
-        blob = b''
-        while True:
-            char = fh.read(1)
-            readbytes += 1
-            if char == b'\n':
-                break
-            blob += char
-            if readbytes >= size:
-                break
-        uiddata = blob.decode('utf8', 'ignore')
-        c.execute('''INSERT INTO uid (pubrowid, uiddata, is_primary) VALUES (?, ?, 1)''',
-                  (p_rowid, uiddata))
-        p_rowid += 1
-        namecount += 1
-
-    logger.info('Imported %s names' % namecount)
-
-
-def wotsap_populate_sigs(c, fh, size):
-    logger.info('Converting sigs...')
-    import struct
-    readbytes = 0
-    p_rowid = 1
-    totalsigs = 0
-    while readbytes < size:
-        sigcount = struct.unpack('!i', fh.read(4))[0]
-        readbytes += 4
-        cursig = 0
-        while cursig < sigcount:
-            # ignore the leading 4 bits for now, as we don't do
-            # anything with sig types for our purposes
-            _sig = 0x0FFFFFFF & struct.unpack('!i', fh.read(4))[0]
-
-            readbytes += 4
-            # in wotsap uidrow ends up being the same as pubrow
-            c.execute('''INSERT INTO sig (uidrowid, pubrowid) VALUES (?, ?)''',
-                      (p_rowid, _sig+1))
-
-            cursig += 1
-            totalsigs += 1
-
-        p_rowid += 1
-
-    logger.info('Imported %s signature relationships' % totalsigs)
-
-
-def convert_wotsap(c, wotsap):
-    import bz2
-    fh = bz2.open(wotsap)
-    magic = fh.read(8)
-    if magic != b'!<arch>\n':
-        logger.critical('%s does not appear to be in ar archive' % wotsap)
-        sys.exit(1)
-    while True:
-        fileident = fh.read(16).strip()
-        if not fileident:
-            break
-        fh.read(32)
-        size = int(fh.read(10).strip())
-        fh.read(2)
-        if fileident[:4] == b'keys':
-            wotsap_populate_keys(c, fh, size)
-        elif fileident[:4] == b'name':
-            wotsap_populate_names(c, fh, size)
-        elif fileident[:4] == b'sign':
-            wotsap_populate_sigs(c, fh, size)
-        else:
-            fh.read(size)
-
-
 if __name__ == '__main__':
     import argparse
 
@@ -304,16 +209,13 @@ if __name__ == '__main__':
                     action='store_true', default=False,
                     help='Do not discard keys considered too weak')
     ap.add_argument('--gpgbin',
-                    default='/usr/bin/gpg2',
+                    default='/usr/bin/gpg',
                     help='Location of the gpg binary to use')
-    ap.add_argument('--wotsap', default=None,
-                    help='Convert a wotsap archive instead of using keyring')
     ap.add_argument('--gnupghome',
                     help='Set this as gnupghome instead of using the default')
 
     cmdargs = ap.parse_args()
 
-    global logger
     logger = wotmate.get_logger(cmdargs.quiet)
 
     if cmdargs.gnupghome:
@@ -323,6 +225,7 @@ if __name__ == '__main__':
 
     try:
         os.unlink(cmdargs.dbfile)
+        logger.debug('Removed old %s', cmdargs.dbfile)
     except OSError as ex:
         pass
 
@@ -330,11 +233,8 @@ if __name__ == '__main__':
     cursor = dbconn.cursor()
     wotmate.init_sqlite_db(cursor)
 
-    if not cmdargs.wotsap:
-        (pub_map, uid_map) = keyring_load_pub_uid(cursor, cmdargs.use_weak)
-        keyring_load_sig_data(cursor, pub_map, uid_map)
-    else:
-        convert_wotsap(cursor, cmdargs.wotsap)
+    (pub_map, uid_map) = keyring_load_pub_uid(cursor, cmdargs.use_weak)
+    keyring_load_sig_data(cursor, pub_map, uid_map)
 
     dbconn.commit()
     dbconn.close()
