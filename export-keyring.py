@@ -156,6 +156,8 @@ if __name__ == '__main__':
                     spath = os.path.join(kpath, 'default')
                     tpath = os.path.relpath(keyout, kpath)
                     if os.path.islink(spath):
+                        if os.readlink(spath) == tpath:
+                            continue
                         if spath in my_symlinks:
                             # There's multiple keys with the same identity. First one wins, for the lack of a
                             # better solution that is also sane.
