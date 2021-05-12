@@ -3,7 +3,12 @@ WOTMATE
 
 This is an attempt to reimplement the defunct PGP pathfinder without
 needing anything other than your own keyring. This is very much a work
-in progress. Currently, the following tools are available:
+in progress.
+
+Prerequisite:
+    ./make-sqlitedb.py
+
+Currently, the following tools are available:
 
 graph-paths.py
 ~~~~~~~~~~~~~~
