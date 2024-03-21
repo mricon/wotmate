@@ -1,19 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright (C) 2018 by The Linux Foundation and contributors
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright © 2018-2024 by The Linux Foundation and contributors
 __author__ = 'Konstantin Ryabitsev <konstantin@linuxfoundation.org>'
 
 import sys
@@ -40,7 +28,7 @@ GNUPGHOME = None
 
 logger = logging.getLogger(__name__)
 
-# convenience caching so we avoid redundant lookups
+# convenience caching to avoid redundant look-ups
 _all_signed_by_cache = dict()
 _all_sigs_cache = dict()
 _all_uiddata_cache = dict()
@@ -110,13 +98,13 @@ def gpg_get_lines(args, matchonly=()):
 
 def gpg_get_fields(bline):
     line = bline.decode('utf8', 'ignore')
-    # gpg uses \x3a to indicate an encoded colon, so we explode and de-encode
+    # gpg uses \x3a to indicate an encoded colon, so explode and de-encode
     fields = [rawchunk.replace('\\x3a', ':') for rawchunk in line.split(':')]
-    # fields 5 and 6 are timestamps, so make them python datetime
+    # fields 5 and 6 are timestamps, so convert them to isoformat for sqlite3 needs
     if len(fields[5]):
-        fields[5] = datetime.fromtimestamp(int(fields[5]))
+        fields[5] = datetime.fromtimestamp(int(fields[5])).isoformat()
     if len(fields[6]):
-        fields[6] = datetime.fromtimestamp(int(fields[6]))
+        fields[6] = datetime.fromtimestamp(int(fields[6])).isoformat()
 
     return fields
 
@@ -283,7 +271,7 @@ def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys):
                 # no need to go any deeper than current shortest
                 maxdepth = depth - 1 + len(shortest)
         else:
-            # if we returned with None, then this key is a dead-end at this and lower depths
+            # if it returns with None, then this key is a dead-end at this and lower depths
             for _d in range(depth, maxdepth):
                 _seenkeys.add((_d, s_p_rowid))
 

@@ -1,19 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright (C) 2015 by The Linux Foundation and contributors
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright © 2018-2024 by The Linux Foundation and contributors
+__author__ = 'Konstantin Ryabitsev <konstantin@linuxfoundation.org>'
 
 import os
 import sqlite3
@@ -90,7 +79,7 @@ def keyring_load_pub_uid(c, use_weak):
 def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
     logger.info('Loading signature data')
     sigquery = 'INSERT INTO sig VALUES (?,?,?,?,?)'
-    # we use these to track which is the current pubkey/uid we're looking at
+    # used to track the current pubkey/uid
     pubkeyid = None
     uidrowid = None
     uidsigs = {}
@@ -127,15 +116,15 @@ def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
             try:
                 uidrowid = uid_hash_rowid_map[(pubkeyid, fields[7])]
             except IndexError:
-                # unknown uid somehow... ignore it
+                # unknown uid somehow, ignore it
                 continue
 
         elif fields[0] in ('sig', 'rev'):
             if not pubkeyid or is_revuid:
                 ignored_sigs += 1
                 continue
-            # some gpg versions, when using --fast-list-mode, will not show UID
-            # entries, so for those cases we use the primary UID of the pubkey
+            # some gpg versions, when using --fast-list-mode, don't show UID
+            # entries, so for those cases use the primary UID of the pubkey
             if uidrowid is None:
                 uidrowid = pub_keyid_rowid_map[pubkeyid][1]
 
