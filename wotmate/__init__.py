@@ -78,6 +78,13 @@ def gpg_run_command(args: list, with_colons: bool = True, stdin: Optional[bytes]
     return output
 
 
+def lint(keydata: bytes) -> bool:
+    sp = subprocess.Popen('sq cert -q lint'.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=None)
+    sp.communicate(input=keydata)
+
+    return sp.returncode == 0
+
+
 def gpg_get_lines(args, matchonly=()):
     output = gpg_run_command(args)
     lines = []

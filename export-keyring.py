@@ -119,6 +119,10 @@ if __name__ == '__main__':
         header = wotmate.gpg_run_command(args, with_colons=False)
         keyexport = header + b'\n\n' + keydata + b'\n'
 
+        if not wotmate.lint(keydata):
+            logger.debug('Skipping %s due to bad linter results', kid)
+            continue
+
         key_paths = wotmate.get_key_paths(c, from_rowid, to_rowid, cmdargs.maxdepth, cmdargs.maxpaths)
         if not len(key_paths):
             logger.debug('Skipping %s due to invalid WoT', kid)
