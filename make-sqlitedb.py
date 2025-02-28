@@ -32,13 +32,13 @@ def keyring_load_pub_uid(c, use_weak):
                 continue
 
             data = (
-                    fields[4],
-                    fields[1],
-                    fields[2],
-                    fields[3],
-                    fields[5],
-                    fields[6],
-                    fields[8],
+                    fields[4], # KeyID
+                    fields[1], # Validity
+                    fields[2], # Key length
+                    fields[3], # Public key algorithm
+                    fields[5], # Creation date
+                    fields[6], # Expiration date
+                    fields[8], # Ownertrust
                    )
             c.execute('INSERT INTO pub VALUES (?,?,?,?,?,?,?)', data)
             current_pubkey = fields[4]
@@ -53,10 +53,10 @@ def keyring_load_pub_uid(c, use_weak):
             if current_pubrowid is not None:
                 data = (
                     current_pubrowid,
-                    fields[1],
-                    fields[5],
-                    fields[6],
-                    fields[9],
+                    fields[1], # Validity
+                    fields[5], # Creation date
+                    fields[6], # Expiration date
+                    fields[9], # User-ID
                     is_primary,
                 )
                 c.execute('INSERT INTO uid VALUES (?,?,?,?,?,?)', data)

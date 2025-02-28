@@ -78,6 +78,13 @@ def gpg_run_command(args: list, with_colons: bool = True, stdin: Optional[bytes]
     return output
 
 
+def lint(keydata: bytes) -> bool:
+    sp = subprocess.Popen('sq cert -q lint'.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=None)
+    sp.communicate(input=keydata)
+
+    return sp.returncode == 0
+
+
 def gpg_get_lines(args, matchonly=()):
     output = gpg_run_command(args)
     lines = []
@@ -140,8 +147,8 @@ def init_sqlite_db(c):
                   created TEXT,
                   expires TEXT,
                   sigtype INTEGER,
-                  FOREIGN KEY(uidrowid) REFERENCES pub(rowid),
-                  FOREIGN KEY(pubrowid) REFERENCES uid(rowid),
+                  FOREIGN KEY(uidrowid) REFERENCES uid(rowid),
+                  FOREIGN KEY(pubrowid) REFERENCES pub(rowid),
                   PRIMARY KEY (uidrowid, pubrowid)
                  ) WITHOUT ROWID''')
 
