@@ -140,8 +140,8 @@ def init_sqlite_db(c):
                   created TEXT,
                   expires TEXT,
                   sigtype INTEGER,
-                  FOREIGN KEY(uidrowid) REFERENCES pub(rowid),
-                  FOREIGN KEY(pubrowid) REFERENCES uid(rowid),
+                  FOREIGN KEY(uidrowid) REFERENCES uid(rowid),
+                  FOREIGN KEY(pubrowid) REFERENCES pub(rowid),
                   PRIMARY KEY (uidrowid, pubrowid)
                  ) WITHOUT ROWID''')
 
