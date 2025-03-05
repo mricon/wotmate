@@ -224,6 +224,7 @@ def make_graph_node(c, p_rowid, show_trust=False):
         anode.set('label', '{{%s\n%s|{val: %s|tru: %s}}|%s}' % (name, show, val, trust, keyline))
     else:
         anode.set('label', '{%s\n%s|%s}' % (name, show, keyline))
+    anode.set('URL', '%s.svg' % kid)
     return anode
 
 
