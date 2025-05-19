@@ -31,15 +31,19 @@ logger = logging.getLogger(__name__)
 # convenience caching to avoid redundant look-ups
 _all_signed_by_cache = dict()
 _all_sigs_cache = dict()
-_all_uiddata_cache = dict()
+_all_pub_uiddata_cache = dict()
 _seenkeys = set()
 
 
+def get_pub_uid_by_pubrow(c, p_rowid):
+    if p_rowid not in _all_pub_uiddata_cache:
+        c.execute('SELECT pub.keyid, uid.uiddata FROM uid JOIN pub ON uid.pubrowid = pub.rowid WHERE pubrowid=?', (p_rowid,))
+        _all_pub_uiddata_cache[p_rowid] = c.fetchone()
+    return _all_pub_uiddata_cache[p_rowid]
+
+
 def get_uiddata_by_pubrow(c, p_rowid):
-    if p_rowid not in _all_uiddata_cache:
-        c.execute('SELECT uiddata FROM uid WHERE pubrowid=?', (p_rowid,))
-        _all_uiddata_cache[p_rowid] = c.fetchone()[0]
-    return _all_uiddata_cache[p_rowid]
+    return get_pub_uid_by_pubrow(c, p_rowid)[1]
 
 
 def get_logger(quiet=False):
