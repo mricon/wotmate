@@ -105,10 +105,27 @@ if __name__ == '__main__':
         keydata = wotmate.gpg_run_command(args, with_colons=False)
         keyout = os.path.join(keydir, '%s.asc' % kid)
 
+        # Is there already a key file in place?
+        key_changed = False
+        if os.path.exists(keyout):
+            key_already_exists = True
+            # Load it up and see if it's different
+            with open(keyout, 'rb') as fin:
+                old_keyexport = fin.read()
+                if keydata not in old_keyexport:
+                    key_changed = True
+                    logger.debug('Key changes detected for %s', kid)
+        else:
+            key_already_exists = False
+            key_changed = True
+
         key_paths = wotmate.get_key_paths(c, from_rowid, to_rowid, cmdargs.maxdepth, cmdargs.maxpaths)
         if not len(key_paths):
-            logger.debug('Skipping %s due to invalid WoT', kid)
-            continue
+            if key_already_exists:
+                logger.debug('%s has an to invalid WoT, but already exists, so still update it', kid)
+            else:
+                logger.debug('Skipping %s due to invalid WoT', kid)
+                continue
 
         kpblock = ''
         for kp in key_paths:
@@ -118,18 +135,6 @@ if __name__ == '__main__':
                 kpblock += f'  {kid}  {kpuid}\n'
             kpblock += '\n'
         key_paths_repr = kpblock.encode()
-
-        # Is there already a key file in place?
-        key_changed = False
-        if os.path.exists(keyout):
-            # Load it up and see if it's different
-            with open(keyout, 'rb') as fin:
-                old_keyexport = fin.read()
-                if keydata not in old_keyexport:
-                    key_changed = True
-                    logger.debug('Key changes detected for %s', kid)
-        else:
-            key_changed = True
 
         txtgraphout = os.path.join(graphdir, "%s.txt" % kid)
         trust_changed = key_changed
