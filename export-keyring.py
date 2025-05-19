@@ -51,7 +51,7 @@ if __name__ == '__main__':
     ap.add_argument('--graph-out-format', dest='graph_out_format', default='svg',
                     help='Export graphs in this format')
     ap.add_argument('--key-export-options', dest='key_export_options',
-                    default='export-attributes',
+                    default='export-attributes,export-clean',
                     help='The value to pass to gpg --export-options')
     ap.add_argument('--gen-b4-keyring', action='store_true', dest='gen_b4_keyring',
                     default=False,
