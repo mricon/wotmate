@@ -162,7 +162,7 @@ def get_all_signed_by(c, p_rowid):
         c.execute('''SELECT DISTINCT uid.pubrowid
                                 FROM uid JOIN sig ON sig.uidrowid = uid.rowid 
                                WHERE sig.pubrowid=?''', (p_rowid,))
-        _all_signed_by_cache[p_rowid] = c.fetchall()
+        _all_signed_by_cache[p_rowid] = [pubrowid for (pubrowid,) in c.fetchall()]
 
     return _all_signed_by_cache[p_rowid]
 
@@ -263,7 +263,7 @@ def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys):
     depth += 1
     sigs = get_all_signed_by(c, t_p_rowid)
 
-    if (b_p_rowid,) in sigs:
+    if b_p_rowid in sigs:
         return [t_p_rowid, b_p_rowid]
 
     shortest = None
@@ -271,7 +271,7 @@ def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys):
     if depth >= maxdepth:
         return None
 
-    for (s_p_rowid,) in sigs:
+    for s_p_rowid in sigs:
         if s_p_rowid in ignorekeys or (depth, s_p_rowid) in _seenkeys:
             continue
 
@@ -358,7 +358,7 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
         logger.critical('Top key did not sign any keys')
         sys.exit(1)
 
-    ignorekeys = [item for sublist in sigs for item in sublist] + [t_p_rowid]
+    ignorekeys = sigs + [t_p_rowid]
 
     if b_p_rowid in ignorekeys:
         logger.debug('Bottom key is signed directly by the top key')
@@ -369,7 +369,7 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
 
     paths = []
 
-    for (s_p_rowid,) in sigs:
+    for s_p_rowid in sigs:
         lookedat += 1
         # logger.debug('Trying "%s" (%s/%s)', get_uiddata_by_pubrow(c, s_p_rowid), lookedat, len(sigs))
         path = get_shortest_path(c, s_p_rowid, b_p_rowid, 0, maxdepth-1, ignorekeys)
