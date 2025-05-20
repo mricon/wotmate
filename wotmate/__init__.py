@@ -7,6 +7,7 @@ __author__ = 'Konstantin Ryabitsev <konstantin@linuxfoundation.org>'
 import sys
 import subprocess
 import logging
+import itertools
 
 from typing import Optional
 
@@ -31,15 +32,19 @@ logger = logging.getLogger(__name__)
 # convenience caching to avoid redundant look-ups
 _all_signed_by_cache = dict()
 _all_sigs_cache = dict()
-_all_uiddata_cache = dict()
+_all_pub_uiddata_cache = dict()
 _seenkeys = set()
 
 
+def get_pub_uid_by_pubrow(c, p_rowid):
+    if p_rowid not in _all_pub_uiddata_cache:
+        c.execute('SELECT pub.keyid, uid.uiddata FROM uid JOIN pub ON uid.pubrowid = pub.rowid WHERE pubrowid=?', (p_rowid,))
+        _all_pub_uiddata_cache[p_rowid] = c.fetchone()
+    return _all_pub_uiddata_cache[p_rowid]
+
+
 def get_uiddata_by_pubrow(c, p_rowid):
-    if p_rowid not in _all_uiddata_cache:
-        c.execute('SELECT uiddata FROM uid WHERE pubrowid=?', (p_rowid,))
-        _all_uiddata_cache[p_rowid] = c.fetchone()[0]
-    return _all_uiddata_cache[p_rowid]
+    return get_pub_uid_by_pubrow(c, p_rowid)[1]
 
 
 def get_logger(quiet=False):
@@ -158,7 +163,7 @@ def get_all_signed_by(c, p_rowid):
         c.execute('''SELECT DISTINCT uid.pubrowid
                                 FROM uid JOIN sig ON sig.uidrowid = uid.rowid 
                                WHERE sig.pubrowid=?''', (p_rowid,))
-        _all_signed_by_cache[p_rowid] = c.fetchall()
+        _all_signed_by_cache[p_rowid] = [pubrowid for (pubrowid,) in c.fetchall()]
 
     return _all_signed_by_cache[p_rowid]
 
@@ -228,68 +233,6 @@ def make_graph_node(c, p_rowid, show_trust=False):
     return anode
 
 
-def cull_redundant_paths(paths, maxpaths=None):
-    paths.sort(key=len)
-
-    culled = []
-    chunks = []
-    for path in paths:
-        redundant = False
-        pos = -2
-        while pos > -len(path):
-            if path[pos:] in chunks:
-                redundant = True
-                break
-            chunks.append(path[pos:])
-            pos -= 1
-
-        if not redundant:
-            culled.append(path)
-            if maxpaths and len(culled) >= maxpaths:
-                break
-
-    return culled
-
-
-def get_shortest_path(c, t_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys):
-    global _seenkeys
-    # Zero out seenkeys at 0-depth
-    if depth == 0:
-        _seenkeys = set()
-    depth += 1
-    sigs = get_all_signed_by(c, t_p_rowid)
-
-    if (b_p_rowid,) in sigs:
-        return [t_p_rowid, b_p_rowid]
-
-    shortest = None
-
-    if depth >= maxdepth:
-        return None
-
-    for (s_p_rowid,) in sigs:
-        if s_p_rowid in ignorekeys or (depth, s_p_rowid) in _seenkeys:
-            continue
-
-        subchain = get_shortest_path(c, s_p_rowid, b_p_rowid, depth, maxdepth, ignorekeys)
-        if subchain:
-            if shortest is None or len(shortest) > len(subchain):
-                shortest = subchain
-                _seenkeys.add((depth, s_p_rowid))
-                # no need to go any deeper than current shortest
-                maxdepth = depth - 1 + len(shortest)
-        else:
-            # if it returns with None, then this key is a dead-end at this and lower depths
-            for _d in range(depth, maxdepth):
-                _seenkeys.add((_d, s_p_rowid))
-
-    if shortest is not None:
-        _seenkeys.add((depth, t_p_rowid))
-        return [t_p_rowid] + shortest
-
-    return None
-
-
 def draw_key_paths(c, paths, graph, show_trust):
     seenactors = {}
     # make a subgraph for toplevel nodes
@@ -348,43 +291,59 @@ def get_pubrow_id(c, whatnot):
 
 
 def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
-    # Next, get rowids of all keys signed by top key
-    sigs = get_all_signed_by(c, t_p_rowid)
-    if not sigs:
-        logger.critical('Top key did not sign any keys')
-        sys.exit(1)
 
-    ignorekeys = [item for sublist in sigs for item in sublist] + [t_p_rowid]
+    def gen_uniq_paths(t_p_rowid, b_p_rowid, maxdepth):
+        logger.debug(f'search for {str(b_p_rowid) + " " + get_uiddata_by_pubrow(c, b_p_rowid)}')
 
-    if b_p_rowid in ignorekeys:
-        logger.debug('Bottom key is signed directly by the top key')
-        return [[t_p_rowid, b_p_rowid]]
+        # prioq tracks the pairs (depth, path) that need further inspection
+        prioq = [(0, [t_p_rowid])]
 
-    logger.debug('Found %s keys signed by top key' % len(sigs))
-    lookedat = 0
+        found = set()
+        used_keys = set()
 
-    paths = []
+        while prioq:
+            depth, path = prioq.pop(0)
 
-    for (s_p_rowid,) in sigs:
-        lookedat += 1
-        # logger.debug('Trying "%s" (%s/%s)', get_uiddata_by_pubrow(c, s_p_rowid), lookedat, len(sigs))
-        path = get_shortest_path(c, s_p_rowid, b_p_rowid, 0, maxdepth-1, ignorekeys)
-        if path:
-            logger.debug('`- found a path with %s members' % len(path))
-            paths.append([t_p_rowid] + path)
-            if len(path) > 2:
-                ignorekeys += path[1:-2]
+            if path[-1] in found:
+                # We already know a path to `path[-1]` of depth <= `depth`
+                continue
 
-    if not paths:
+            if path[-1] == b_p_rowid:
+                logger.debug(f'found: {[str(p) + " " + get_uiddata_by_pubrow(c, p) for p in path]} @{depth=}')
+                yield path
+
+                # if we found a path of length 1, this is good enough
+                if depth <= 1:
+                    return
+
+                new_used_keys = set(path[1:-1])
+                used_keys.update(new_used_keys)
+
+                # We might have pruned some paths that are interesting again now that there are new keys in used_keys
+                prioq = [(0, [t_p_rowid])]
+                found = set()
+                continue
+
+            #logger.debug(f'consider: {[str(p) + " " + get_uiddata_by_pubrow(c, p) for p in path]} @{depth=}')
+
+            # We found a shortest path to path[-1], so we don't need to consider further paths leading to it
+            found.add(path[-1])
+
+            if depth < maxdepth:
+                sigs = set(get_all_signed_by(c, path[-1])) - used_keys - found
+
+                # If the cert to find a path for is reachable from path[-1], the other sigs are not interesting
+                if b_p_rowid in sigs:
+                    prioq.append((depth + 1, path + [b_p_rowid]))
+                else:
+                    prioq.extend((depth + 1, path + [s]) for s in sorted(sigs))
+
+    ret = list(itertools.islice(gen_uniq_paths(t_p_rowid, b_p_rowid, maxdepth), maxpaths))
+    if not ret:
         logger.info('No valid paths between %s and %s',
                     get_uiddata_by_pubrow(c, t_p_rowid), get_uiddata_by_pubrow(c, b_p_rowid))
-        return []
 
-    culled = cull_redundant_paths(paths, maxpaths)
-    logger.debug('%s paths left after culling' % len(culled))
-
-    return culled
-
+    return ret
 
 def get_u_key(c):
     c.execute('''SELECT rowid 
