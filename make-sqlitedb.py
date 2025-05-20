@@ -164,9 +164,10 @@ def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
                 continue
 
             # skip SHA-1 based signatures
-            if fields[15] == "2":
-                ignored_sigs += 1
-                continue
+            # Disabled for the moment -- needs to be conditional
+            #if fields[15] == "2":
+            #    ignored_sigs += 1
+            #    continue
 
             # do we have the key that signed it?
             if sigkeyid in pub_keyid_rowid_map.keys():
