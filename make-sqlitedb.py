@@ -8,11 +8,14 @@ import os
 import sqlite3
 import wotmate
 
+from typing import Tuple, Dict, Any, Set
 
-def keyring_load_pub_uid(c, use_weak):
+
+def keyring_load_pub_uid(c: sqlite3.Cursor, 
+                         use_weak: bool) -> Tuple[Dict[str, Tuple[int, int]], Dict[Tuple[str, str], int]]:
     logger.info('Loading all valid pubkeys')
-    uid_hash_rowid_map = {}
-    pub_keyid_rowid_map = {}
+    uid_hash_rowid_map: Dict[Tuple[str, str], int] = dict()
+    pub_keyid_rowid_map: Dict[str, Tuple[int, int]] = dict()
     current_pubkey = None
     current_pubrowid = None
     is_primary = 1
@@ -51,6 +54,9 @@ def keyring_load_pub_uid(c, use_weak):
                 continue
 
             if current_pubrowid is not None:
+                if current_pubkey is None:
+                    logger.error('No pubkey for uid %s' % fields[7])
+                    continue
                 data = (
                     current_pubrowid,
                     fields[1], # Validity
@@ -60,6 +66,9 @@ def keyring_load_pub_uid(c, use_weak):
                     is_primary,
                 )
                 c.execute('INSERT INTO uid VALUES (?,?,?,?,?,?)', data)
+                if c.lastrowid is None:
+                    logger.error('Failed to insert uid %s' % fields[9])
+                    continue
                 uid_hash_rowid_map[(current_pubkey, fields[7])] = c.lastrowid
 
                 if is_primary:
@@ -76,14 +85,17 @@ def keyring_load_pub_uid(c, use_weak):
     return pub_keyid_rowid_map, uid_hash_rowid_map
 
 
-def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
+def keyring_load_sig_data(c: sqlite3.Cursor, 
+                          pub_keyid_rowid_map: Dict[str, Tuple[int, int]],
+                          uid_hash_rowid_map: Dict[Tuple[str, str], int],
+                          use_weak: bool = False) -> None:
     logger.info('Loading signature data')
     sigquery = 'INSERT INTO sig VALUES (?,?,?,?,?)'
     # used to track the current pubkey/uid
     pubkeyid = None
     uidrowid = None
-    uidsigs = {}
-    revsigs = []
+    uidsigs: Dict[str, Any] = dict()
+    revsigs: Set[str] = set()
     is_revuid = False
     sigcount = 0
     ignored_sigs = 0
@@ -96,8 +108,8 @@ def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
         if uidsigs and fields[0] in ('pub', 'uid'):
             c.executemany(sigquery, uidsigs.values())
             sigcount += len(uidsigs)
-            uidsigs = {}
-            revsigs = []
+            uidsigs = dict()
+            revsigs = set()
 
         if fields[0] == 'pub':
             uidrowid = None
@@ -146,7 +158,7 @@ def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
                         del(uidsigs[sigkeyid])
                         ignored_sigs += 1
                     # add to revsigs, so we ignore this sig if we see it
-                    revsigs.append(sigkeyid)
+                    revsigs.add(sigkeyid)
                     continue
 
                 elif sigtype < 0x10 or sigtype > 0x13:
@@ -163,11 +175,10 @@ def keyring_load_sig_data(c, pub_keyid_rowid_map, uid_hash_rowid_map):
                 ignored_sigs += 1
                 continue
 
-            # skip SHA-1 based signatures
-            # Disabled for the moment -- needs to be conditional
-            #if fields[15] == "2":
-            #    ignored_sigs += 1
-            #    continue
+            if not use_weak and fields[15] in {'1', '2'}:
+                logger.debug('Ignoring weak sig with algo=%s' % fields[15])
+                ignored_sigs += 1
+                continue
 
             # do we have the key that signed it?
             if sigkeyid in pub_keyid_rowid_map.keys():
@@ -200,9 +211,12 @@ if __name__ == '__main__':
     ap.add_argument('--dbfile', dest='dbfile',
                     default='siginfo.db',
                     help='Create database in this file')
-    ap.add_argument('--use-weak-keys', dest='use_weak',
+    ap.add_argument('--use-weak-keys', dest='use_weak_keys',
                     action='store_true', default=False,
                     help='Do not discard keys considered too weak')
+    ap.add_argument('--use-weak-algos', dest='use_weak_algos',
+                    action='store_true', default=False,
+                    help='Do not discard cross-signatures that use weak algorithms')
     ap.add_argument('--gpgbin',
                     default='/usr/bin/gpg',
                     help='Location of the gpg binary to use')
@@ -228,8 +242,8 @@ if __name__ == '__main__':
     cursor = dbconn.cursor()
     wotmate.init_sqlite_db(cursor)
 
-    (pub_map, uid_map) = keyring_load_pub_uid(cursor, cmdargs.use_weak)
-    keyring_load_sig_data(cursor, pub_map, uid_map)
+    (pub_map, uid_map) = keyring_load_pub_uid(cursor, cmdargs.use_weak_keys)
+    keyring_load_sig_data(cursor, pub_map, uid_map, use_weak=cmdargs.use_weak_algos)
 
     dbconn.commit()
     dbconn.close()

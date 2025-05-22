@@ -12,8 +12,10 @@ import pathlib
 from email.utils import parseaddr
 from urllib.parse import quote_plus
 
+from typing import Set, List
+
 import wotmate
-import pydotplus.graphviz as pd
+import pydotplus.graphviz as pd  # type: ignore[import]
 
 
 if __name__ == '__main__':
@@ -53,6 +55,9 @@ if __name__ == '__main__':
     ap.add_argument('--key-export-options', dest='key_export_options',
                     default='export-attributes,export-clean',
                     help='The value to pass to gpg --export-options')
+    ap.add_argument('--use-weak-algos', dest='use_weak_algos',
+                    action='store_true', default=False,
+                    help='Do not discard cross-signatures that use weak algorithms')
     ap.add_argument('--gen-b4-keyring', action='store_true', dest='gen_b4_keyring',
                     default=False,
                     help='Generate a b4-style symlinked keyring as well')
@@ -97,11 +102,15 @@ if __name__ == '__main__':
         os.mkdir(graphdir)
 
     kcount = wcount = 0
-    my_symlinks = set()
+    my_symlinks: Set[str] = set()
     for (to_rowid, kid, uiddata) in c.fetchall():
         kcount += 1
         # First, export the key
-        args = ['-a', '--export', '--export-options', cmdargs.key_export_options, kid]
+        args: List[str] = ['-a', '--export']
+        if cmdargs.use_weak_algos:
+            args += ['--allow-weak-digest-algos', '--allow-weak-key-signatures']
+        args += ['--export-options', cmdargs.key_export_options, kid]
+
         keydata = wotmate.gpg_run_command(args, with_colons=False)
         keyout = os.path.join(keydir, '%s.asc' % kid)
 
@@ -202,14 +211,14 @@ if __name__ == '__main__':
             graph = pd.Dot(
                 graph_type='digraph',
             )
-            graph.set_node_defaults(
+            graph.set_node_defaults(  # type: ignore[no-untyped-call]
                 fontname=cmdargs.font,
                 fontsize=cmdargs.fontsize,
             )
 
             wotmate.draw_key_paths(c, key_paths, graph, cmdargs.show_trust)
             graphout = os.path.join(graphdir, '%s.%s' % (kid, cmdargs.graph_out_format))
-            graph.write(graphout, format=cmdargs.graph_out_format)
+            graph.write(graphout, format=cmdargs.graph_out_format)  # type: ignore[no-untyped-call]
             logger.info('Wrote %s', graphout)
 
             logger.debug('Writing out the text graph')

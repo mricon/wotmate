@@ -8,14 +8,15 @@ import sys
 import subprocess
 import logging
 import itertools
+import sqlite3
 
-from typing import Optional
+from typing import Optional, Dict, List, Tuple, Set
 
 from datetime import datetime
-import pydotplus.graphviz as pd
+import pydotplus.graphviz as pd  # type: ignore
 
 
-ALGOS = {
+ALGOS: Dict[int, str] = {
     1: 'RSA',
     17: 'DSA',
     18: 'ECDH',
@@ -30,24 +31,24 @@ GNUPGHOME = None
 logger = logging.getLogger(__name__)
 
 # convenience caching to avoid redundant look-ups
-_all_signed_by_cache = dict()
-_all_sigs_cache = dict()
-_all_pub_uiddata_cache = dict()
-_seenkeys = set()
+_all_signed_by_cache: Dict[int, List[int]] = dict()
+_all_sigs_cache: Dict[int, List[int]] = dict()
+_all_pub_uiddata_cache: Dict[int, Tuple[str, str]] = dict()
+_seenkeys: Set[int] = set()
 
 
-def get_pub_uid_by_pubrow(c, p_rowid):
+def get_pub_uid_by_pubrow(c: sqlite3.Cursor, p_rowid: int) -> Tuple[str, str]:
     if p_rowid not in _all_pub_uiddata_cache:
         c.execute('SELECT pub.keyid, uid.uiddata FROM uid JOIN pub ON uid.pubrowid = pub.rowid WHERE pubrowid=?', (p_rowid,))
         _all_pub_uiddata_cache[p_rowid] = c.fetchone()
     return _all_pub_uiddata_cache[p_rowid]
 
 
-def get_uiddata_by_pubrow(c, p_rowid):
+def get_uiddata_by_pubrow(c: sqlite3.Cursor, p_rowid: int):
     return get_pub_uid_by_pubrow(c, p_rowid)[1]
 
 
-def get_logger(quiet=False):
+def get_logger(quiet: bool = False) -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
     formatter = logging.Formatter('%(message)s')
@@ -61,7 +62,7 @@ def get_logger(quiet=False):
     return logger
 
 
-def gpg_run_command(args: list, with_colons: bool = True, stdin: Optional[bytes] = None) -> bytes:
+def gpg_run_command(args: List[str], with_colons: bool = True, stdin: Optional[bytes] = None) -> bytes:
     cmdargs = [GPGBIN, '--batch']
     if with_colons:
         cmdargs += ['--with-colons']
@@ -90,14 +91,14 @@ def lint(keydata: bytes) -> bool:
     return sp.returncode == 0
 
 
-def gpg_get_lines(args, matchonly=()):
+def gpg_get_lines(args: List[str], matchonly: List[bytes] = list()) -> List[bytes]:
     output = gpg_run_command(args)
-    lines = []
+    lines: List[bytes] = list()
     logger.debug('Processing the output...')
     for line in output.split(b'\n'):
-        if line == b'' or line[0] == b'#':
+        if not len(line.strip()) or line.startswith(b'#'):
             continue
-        if len(matchonly):
+        if matchonly and len(matchonly):
             for match in matchonly:
                 if line.startswith(match):
                     lines.append(line)
@@ -108,7 +109,7 @@ def gpg_get_lines(args, matchonly=()):
     return lines
 
 
-def gpg_get_fields(bline):
+def gpg_get_fields(bline: bytes) -> List[str]:
     line = bline.decode('utf8', 'ignore')
     # gpg uses \x3a to indicate an encoded colon, so explode and de-encode
     fields = [rawchunk.replace('\\x3a', ':') for rawchunk in line.split(':')]
@@ -121,7 +122,7 @@ def gpg_get_fields(bline):
     return fields
 
 
-def init_sqlite_db(c):
+def init_sqlite_db(c: sqlite3.Cursor) -> None:
     # Create primary keys table
     logger.info('Initializing new sqlite3 db with metadata version %s' % DB_VERSION)
     c.execute('''CREATE TABLE metadata (
@@ -158,7 +159,7 @@ def init_sqlite_db(c):
                  ) WITHOUT ROWID''')
 
 
-def get_all_signed_by(c, p_rowid):
+def get_all_signed_by(c: sqlite3.Cursor, p_rowid: int) -> List[int]:
     if p_rowid not in _all_signed_by_cache:
         c.execute('''SELECT DISTINCT uid.pubrowid
                                 FROM uid JOIN sig ON sig.uidrowid = uid.rowid 
@@ -168,7 +169,7 @@ def get_all_signed_by(c, p_rowid):
     return _all_signed_by_cache[p_rowid]
 
 
-def get_all_signed(c, p_rowid):
+def get_all_signed(c: sqlite3.Cursor, p_rowid: int) -> List[int]:
     if p_rowid not in _all_sigs_cache:
         c.execute('''SELECT DISTINCT sig.pubrowid 
                        FROM sig JOIN uid ON sig.uidrowid = uid.rowid 
@@ -178,33 +179,33 @@ def get_all_signed(c, p_rowid):
     return _all_sigs_cache[p_rowid]
 
 
-def get_all_full_trust(c):
+def get_all_full_trust(c: sqlite3.Cursor) -> List[int]:
     c.execute('''SELECT DISTINCT pub.rowid
                    FROM pub
                   WHERE ownertrust IN ('u', 'f')''')
     return c.fetchall()
 
 
-def make_graph_node(c, p_rowid, show_trust=False):
+def make_graph_node(c: sqlite3.Cursor, p_rowid: int, show_trust: bool = False) -> pd.Node:
     c.execute('''SELECT pub.*, 
                         uid.uiddata
                    FROM uid JOIN pub 
                      ON uid.pubrowid = pub.rowid 
                   WHERE pub.rowid=? AND uid.is_primary = 1''', (p_rowid,))
-    (kid, val, size, algo, cre, exp, trust, uiddata) = c.fetchone()
+    (kid, val, size, algo, cre, exp, trust, uiddata) = c.fetchone()  # type: ignore[assignment]
 
     nodename = 'a_%s' % p_rowid
     anode = pd.Node(nodename)
-    anode.set('shape', 'record')
-    anode.set('style', 'rounded')
+    anode.set('shape', 'record')  # type: ignore[no-untyped-call]
+    anode.set('style', 'rounded')  # type: ignore[no-untyped-call]
     if trust == 'u':
-        anode.set('color', 'purple')
+        anode.set('color', 'purple')  # type: ignore[no-untyped-call]
     elif trust == 'f':
-        anode.set('color', 'red')
+        anode.set('color', 'red')  # type: ignore[no-untyped-call]
     elif trust == 'm':
-        anode.set('color', 'blue')
+        anode.set('color', 'blue')  # type: ignore[no-untyped-call]
     else:
-        anode.set('color', 'gray')
+        anode.set('color', 'gray')  # type: ignore[no-untyped-call]
 
     uiddata = uiddata.replace('"', '')
     name = uiddata.split('<')[0].replace('"', '').strip()
@@ -226,40 +227,40 @@ def make_graph_node(c, p_rowid, show_trust=False):
         keyline = '{%s}' % kid
 
     if show_trust:
-        anode.set('label', '{{%s\n%s|{val: %s|tru: %s}}|%s}' % (name, show, val, trust, keyline))
+        anode.set('label', '{{%s\n%s|{val: %s|tru: %s}}|%s}' % (name, show, val, trust, keyline))  # type: ignore[no-untyped-call]
     else:
-        anode.set('label', '{%s\n%s|%s}' % (name, show, keyline))
-    anode.set('URL', '%s.svg' % kid)
+        anode.set('label', '{%s\n%s|%s}' % (name, show, keyline))  # type: ignore[no-untyped-call]
+    anode.set('URL', '%s.svg' % kid)  # type: ignore[no-untyped-call]
     return anode
 
 
-def draw_key_paths(c, paths, graph, show_trust):
-    seenactors = {}
+def draw_key_paths(c: sqlite3.Cursor, paths: List[List[int]], graph: pd.Graph, show_trust: bool):
+    seenactors: Dict[int, pd.Node] = dict()
     # make a subgraph for toplevel nodes
     tl_subgraph = pd.Subgraph('cluster_toplevel')
-    tl_subgraph.set('color', 'white')
+    tl_subgraph.set('color', 'white')  # type: ignore[no-untyped-call]
     for path in paths:
-        signer = None
+        signer: Optional[pd.Node] = None
         for actor in path:
             if actor not in seenactors.keys():
                 anode = make_graph_node(c, actor, show_trust)
                 seenactors[actor] = anode
                 if signer is None:
-                    tl_subgraph.add_node(anode)
+                    tl_subgraph.add_node(anode)  # type: ignore[no-untyped-call]
                 else:
-                    graph.add_node(anode)
+                    graph.add_node(anode)  # type: ignore[no-untyped-call]
             else:
                 anode = seenactors[actor]
 
             if signer is not None:
-                graph.add_edge(pd.Edge(signer, anode))
+                graph.add_edge(pd.Edge(signer, anode))  # type: ignore[no-untyped-call]
 
             signer = anode
 
-    graph.add_subgraph(tl_subgraph)
+    graph.add_subgraph(tl_subgraph)  # type: ignore[no-untyped-call]
 
 
-def get_pubrow_id(c, whatnot):
+def get_pubrow_id(c: sqlite3.Cursor, whatnot: str) -> Optional[int]:
     # first, attempt to treat it as key id
     try:
         int(whatnot, 16)
@@ -290,16 +291,16 @@ def get_pubrow_id(c, whatnot):
     return None
 
 
-def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
+def get_key_paths(c: sqlite3.Cursor, t_p_rowid: int, b_p_rowid: int, maxdepth: int = 5, maxpaths: int = 5):
 
-    def gen_uniq_paths(t_p_rowid, b_p_rowid, maxdepth):
+    def gen_uniq_paths(t_p_rowid: int, b_p_rowid: int, maxdepth: int):
         logger.debug(f'search for {str(b_p_rowid) + " " + get_uiddata_by_pubrow(c, b_p_rowid)}')
 
         # prioq tracks the pairs (depth, path) that need further inspection
-        prioq = [(0, [t_p_rowid])]
+        prioq: List[Tuple[int, List[int]]] = [(0, [t_p_rowid])]
 
-        found = set()
-        used_keys = set()
+        found: Set[int] = set()
+        used_keys: Set[int] = set()
 
         while prioq:
             depth, path = prioq.pop(0)
@@ -345,7 +346,8 @@ def get_key_paths(c, t_p_rowid, b_p_rowid, maxdepth=5, maxpaths=5):
 
     return ret
 
-def get_u_key(c):
+
+def get_u_key(c: sqlite3.Cursor) -> Optional[int]:
     c.execute('''SELECT rowid 
                    FROM pub
                   WHERE ownertrust = 'u' 

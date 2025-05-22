@@ -8,7 +8,7 @@ import sys
 import sqlite3
 
 import wotmate
-import pydotplus.graphviz as pd
+import pydotplus.graphviz as pd  # type: ignore[import]
 
 
 if __name__ == '__main__':
@@ -71,7 +71,7 @@ if __name__ == '__main__':
     graph = pd.Dot(
         graph_type='digraph',
     )
-    graph.set_node_defaults(
+    graph.set_node_defaults(  # type: ignore[no-untyped-call]
         fontname=cmdargs.font,
         fontsize=cmdargs.fontsize,
     )
@@ -80,5 +80,5 @@ if __name__ == '__main__':
 
     chunks = cmdargs.out.split('.')
     outformat = chunks[-1]
-    graph.write(cmdargs.out, format=outformat)
+    graph.write(cmdargs.out, format=outformat)  # type: ignore[no-untyped-call]
     logger.info('Wrote %s' % cmdargs.out)
