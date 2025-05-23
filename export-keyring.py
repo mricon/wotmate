@@ -169,8 +169,9 @@ if __name__ == '__main__':
             header = wotmate.gpg_run_command(args, with_colons=False)
             keyexport = header + b"\n\n" + keydata + b"\n"
 
-            if not wotmate.lint(keydata):
-                logger.debug('Skipping %s due to bad linter results', kid)
+            if not key_already_exists and not wotmate.lint(keydata):
+                # Only do this for newly added keys
+                logger.info('Skipping %s due to bad linter results', kid)
                 continue
 
             with open(keyout, 'wb') as fout:
