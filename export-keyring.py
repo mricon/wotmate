@@ -31,6 +31,9 @@ if __name__ == '__main__':
     ap.add_argument('--verbose', action='store_true',
                     default=False,
                     help='emit extra logging')
+    ap.add_argument('--ignore-linter', dest='ignore_linter', action='store_true',
+                    default=False,
+                    help='Also update keys that fail the Sequoia linter check')
     ap.add_argument('--fromkey',
                     help='Top key ID (if omitted, will use the key with ultimate trust)')
     ap.add_argument('--maxdepth', default=4, type=int,
@@ -173,10 +176,13 @@ if __name__ == '__main__':
             header = wotmate.gpg_run_command(args, with_colons=False)
             keyexport = header + b"\n\n" + keydata + b"\n"
 
+            # Only do this for newly added keys
             if not key_already_exists and not wotmate.lint(keydata):
-                # Only do this for newly added keys
-                logger.info('Skipping %s due to bad linter results', kid)
-                continue
+                if not cmdargs.ignore_linter:
+                    logger.info('Skipping %s due to bad linter results', kid)
+                    continue
+                else:
+                    logger.debug(f'{kid}: Ignore bad linter results')
 
             with open(keyout, 'wb') as fout:
                 fout.write(keyexport)
