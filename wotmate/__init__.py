@@ -48,14 +48,14 @@ def get_uiddata_by_pubrow(c: sqlite3.Cursor, p_rowid: int):
     return get_pub_uid_by_pubrow(c, p_rowid)[1]
 
 
-def get_logger(quiet: bool = False) -> logging.Logger:
+def get_logger(quiet: bool = False, verbose: bool = False) -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
     formatter = logging.Formatter('%(message)s')
     ch.setFormatter(formatter)
     if quiet:
         ch.setLevel(logging.CRITICAL)
-    else:
+    elif not verbose:
         ch.setLevel(logging.INFO)
 
     logger.addHandler(ch)

@@ -28,6 +28,12 @@ if __name__ == '__main__':
     ap.add_argument('--quiet', action='store_true',
                     default=False,
                     help='Be quiet and only output errors')
+    ap.add_argument('--verbose', action='store_true',
+                    default=False,
+                    help='emit extra logging')
+    ap.add_argument('--ignore-linter', dest='ignore_linter', action='store_true',
+                    default=False,
+                    help='Also update keys that fail the Sequoia linter check')
     ap.add_argument('--fromkey',
                     help='Top key ID (if omitted, will use the key with ultimate trust)')
     ap.add_argument('--maxdepth', default=4, type=int,
@@ -69,7 +75,7 @@ if __name__ == '__main__':
     if cmdargs.gpgbin:
         wotmate.GPGBIN = cmdargs.gpgbin
 
-    logger = wotmate.get_logger(cmdargs.quiet)
+    logger = wotmate.get_logger(cmdargs.quiet, cmdargs.verbose)
 
     dbconn = sqlite3.connect(cmdargs.dbfile)
     c = dbconn.cursor()
@@ -133,7 +139,7 @@ if __name__ == '__main__':
             if key_already_exists:
                 logger.debug('%s has an to invalid WoT, but already exists, so still update it', kid)
             else:
-                logger.debug('Skipping %s due to invalid WoT', kid)
+                logger.info('Skipping %s due to invalid WoT', kid)
                 continue
 
         kpblock = ''
@@ -146,17 +152,18 @@ if __name__ == '__main__':
         key_paths_repr = kpblock.encode()
 
         txtgraphout = os.path.join(graphdir, "%s.txt" % kid)
-        trust_changed = key_changed
         if not os.path.exists(txtgraphout):
             logger.debug('Forcing generation of the text graph for %s', kid)
             trust_changed = True
-        elif not key_changed:
+        else:
             # Load it up and see if trust relationships changed
             with open(txtgraphout, 'rb') as fin:
                 old_key_paths_repr = fin.read()
-                if key_paths_repr != old_key_paths_repr:
-                    trust_changed = True
+                trust_changed = (key_paths_repr != old_key_paths_repr)
+                if trust_changed:
                     logger.debug('Trust changes detected for %s', kid)
+
+        logger.debug(f'{kid} {key_changed=} {trust_changed=} {key_already_exists=} {len(key_paths)=}')
 
         if not (key_changed or trust_changed):
             logger.debug('No changes detected for %s', kid)
@@ -169,10 +176,13 @@ if __name__ == '__main__':
             header = wotmate.gpg_run_command(args, with_colons=False)
             keyexport = header + b"\n\n" + keydata + b"\n"
 
+            # Only do this for newly added keys
             if not key_already_exists and not wotmate.lint(keydata):
-                # Only do this for newly added keys
-                logger.info('Skipping %s due to bad linter results', kid)
-                continue
+                if not cmdargs.ignore_linter:
+                    logger.info('Skipping %s due to bad linter results', kid)
+                    continue
+                else:
+                    logger.debug(f'{kid}: Ignore bad linter results')
 
             with open(keyout, 'wb') as fout:
                 fout.write(keyexport)
