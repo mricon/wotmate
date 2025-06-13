@@ -28,6 +28,9 @@ if __name__ == '__main__':
     ap.add_argument('--quiet', action='store_true',
                     default=False,
                     help='Be quiet and only output errors')
+    ap.add_argument('--verbose', action='store_true',
+                    default=False,
+                    help='emit extra logging')
     ap.add_argument('--fromkey',
                     help='Top key ID (if omitted, will use the key with ultimate trust)')
     ap.add_argument('--maxdepth', default=4, type=int,
@@ -69,7 +72,7 @@ if __name__ == '__main__':
     if cmdargs.gpgbin:
         wotmate.GPGBIN = cmdargs.gpgbin
 
-    logger = wotmate.get_logger(cmdargs.quiet)
+    logger = wotmate.get_logger(cmdargs.quiet, cmdargs.verbose)
 
     dbconn = sqlite3.connect(cmdargs.dbfile)
     c = dbconn.cursor()
