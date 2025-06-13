@@ -146,16 +146,15 @@ if __name__ == '__main__':
         key_paths_repr = kpblock.encode()
 
         txtgraphout = os.path.join(graphdir, "%s.txt" % kid)
-        trust_changed = key_changed
         if not os.path.exists(txtgraphout):
             logger.debug('Forcing generation of the text graph for %s', kid)
             trust_changed = True
-        elif not key_changed:
+        else:
             # Load it up and see if trust relationships changed
             with open(txtgraphout, 'rb') as fin:
                 old_key_paths_repr = fin.read()
-                if key_paths_repr != old_key_paths_repr:
-                    trust_changed = True
+                trust_changed = (key_paths_repr != old_key_paths_repr)
+                if trust_changed:
                     logger.debug('Trust changes detected for %s', kid)
 
         if not (key_changed or trust_changed):
