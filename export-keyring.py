@@ -133,7 +133,7 @@ if __name__ == '__main__':
             if key_already_exists:
                 logger.debug('%s has an to invalid WoT, but already exists, so still update it', kid)
             else:
-                logger.debug('Skipping %s due to invalid WoT', kid)
+                logger.info('Skipping %s due to invalid WoT', kid)
                 continue
 
         kpblock = ''
@@ -156,6 +156,8 @@ if __name__ == '__main__':
                 trust_changed = (key_paths_repr != old_key_paths_repr)
                 if trust_changed:
                     logger.debug('Trust changes detected for %s', kid)
+
+        logger.debug(f'{kid} {key_changed=} {trust_changed=} {key_already_exists=} {len(key_paths)=}')
 
         if not (key_changed or trust_changed):
             logger.debug('No changes detected for %s', kid)
