@@ -92,10 +92,10 @@ if __name__ == '__main__':
 
     # Iterate through all keys
     c.execute('''SELECT pub.rowid,
-                        pub.keyid, 
+                        pub.keyid,
                         uid.uiddata
-                   FROM uid JOIN pub 
-                     ON uid.pubrowid = pub.rowid 
+                   FROM uid JOIN pub
+                     ON uid.pubrowid = pub.rowid
                   WHERE uid.is_primary = 1''')
 
     if not os.path.isdir(cmdargs.outdir):
@@ -146,7 +146,7 @@ if __name__ == '__main__':
         for kp in key_paths:
             for lvl, rowid in enumerate(kp):
                 kid, kpuid = wotmate.get_pub_uid_by_pubrow(c, rowid)
-                kpblock += f'   {lvl}' if lvl > 0 else f'from'
+                kpblock += f'   {lvl}' if lvl > 0 else 'from'
                 kpblock += f'  {kid}  {kpuid}\n'
             kpblock += '\n'
         key_paths_repr = kpblock.encode()
