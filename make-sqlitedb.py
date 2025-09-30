@@ -11,7 +11,7 @@ import wotmate
 from typing import Tuple, Dict, Any, Set
 
 
-def keyring_load_pub_uid(c: sqlite3.Cursor, 
+def keyring_load_pub_uid(c: sqlite3.Cursor,
                          use_weak: bool) -> Tuple[Dict[str, Tuple[int, int]], Dict[Tuple[str, str], int]]:
     logger.info('Loading all valid pubkeys')
     uid_hash_rowid_map: Dict[Tuple[str, str], int] = dict()
@@ -21,6 +21,7 @@ def keyring_load_pub_uid(c: sqlite3.Cursor,
     is_primary = 1
     ignored_keys = 0
     ignored_uids = 0
+    data: Tuple[Any, ...]
     for line in wotmate.gpg_get_lines(['--list-public-keys'], [b'pub:', b'uid']):
         fields = wotmate.gpg_get_fields(line)
         if fields[0] == 'pub':
@@ -85,7 +86,7 @@ def keyring_load_pub_uid(c: sqlite3.Cursor,
     return pub_keyid_rowid_map, uid_hash_rowid_map
 
 
-def keyring_load_sig_data(c: sqlite3.Cursor, 
+def keyring_load_sig_data(c: sqlite3.Cursor,
                           pub_keyid_rowid_map: Dict[str, Tuple[int, int]],
                           uid_hash_rowid_map: Dict[Tuple[str, str], int],
                           use_weak: bool = False) -> None:
@@ -115,7 +116,7 @@ def keyring_load_sig_data(c: sqlite3.Cursor,
             uidrowid = None
             pubkeyid = None
             is_revuid = False
-            if fields[4] in pub_keyid_rowid_map.keys():
+            if fields[4] in pub_keyid_rowid_map:
                 pubkeyid = fields[4]
 
         elif fields[0] == 'uid':
@@ -125,6 +126,7 @@ def keyring_load_sig_data(c: sqlite3.Cursor,
             if fields[1] in ('e', 'r', 'i'):
                 is_revuid = True
                 continue
+            is_revuid = False
             try:
                 uidrowid = uid_hash_rowid_map[(pubkeyid, fields[7])]
             except IndexError:
@@ -235,7 +237,7 @@ if __name__ == '__main__':
     try:
         os.unlink(cmdargs.dbfile)
         logger.debug('Removed old %s', cmdargs.dbfile)
-    except OSError as ex:
+    except OSError:
         pass
 
     dbconn = sqlite3.connect(cmdargs.dbfile)
