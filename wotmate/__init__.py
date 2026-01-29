@@ -63,7 +63,7 @@ def get_logger(quiet: bool = False, verbose: bool = False) -> logging.Logger:
 
 
 def gpg_run_command(args: List[str], with_colons: bool = True, stdin: Optional[bytes] = None) -> bytes:
-    cmdargs = [GPGBIN, '--batch']
+    cmdargs = [GPGBIN, '--batch', '--display-charset', 'utf-8']
     if with_colons:
         cmdargs += ['--with-colons']
 
