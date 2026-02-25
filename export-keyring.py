@@ -17,6 +17,11 @@ from typing import Set, List
 import wotmate
 import pydotplus.graphviz as pd  # type: ignore[import]
 
+def get_header(kid):
+    args = ['--list-options', 'show-notations', '--list-options',
+            'no-show-uid-validity', '--with-subkey-fingerprints', '--list-key', kid]
+    header = wotmate.gpg_run_command(args, with_colons=False)
+    return header + b"\n\n"
 
 if __name__ == '__main__':
     import argparse
@@ -67,6 +72,9 @@ if __name__ == '__main__':
     ap.add_argument('--gen-b4-keyring', action='store_true', dest='gen_b4_keyring',
                     default=False,
                     help='Generate a b4-style symlinked keyring as well')
+    ap.add_argument('--update-header', action='store_true', dest='update_header',
+                    default=False,
+                    help='Update certificate files also on header changes')
 
     cmdargs = ap.parse_args()
 
@@ -130,6 +138,12 @@ if __name__ == '__main__':
                 if keydata not in old_keyexport:
                     key_changed = True
                     logger.debug('Key changes detected for %s', kid)
+                elif cmdargs.update_header:
+                    header = get_header(kid)
+                    if header not in old_keyexport:
+                        key_changed = True
+                        logger.debug('Header changes detected for %s', kid)
+
         else:
             key_already_exists = False
             key_changed = True
@@ -170,11 +184,8 @@ if __name__ == '__main__':
             continue
 
         if key_changed:
-            # Now, export the header
-            args = ['--list-options', 'show-notations', '--list-options',
-                    'no-show-uid-validity', '--with-subkey-fingerprints', '--list-key', kid]
-            header = wotmate.gpg_run_command(args, with_colons=False)
-            keyexport = header + b"\n\n" + keydata + b"\n"
+            header = get_header(kid)
+            keyexport = header + keydata + b"\n"
 
             # Only do this for newly added keys
             if not key_already_exists and not wotmate.lint(keydata):
